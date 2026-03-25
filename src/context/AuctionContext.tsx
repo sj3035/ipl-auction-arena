@@ -349,9 +349,9 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(timeout);
   }, [state.timer, state.phase, state.currentPlayer, state.currentBidder]);
 
-  // Bot bidding logic
+  // Bot bidding logic — triggers on bid/player changes, NOT on timer ticks
   useEffect(() => {
-    if (state.phase !== "auction" || state.auctionPaused || !state.currentPlayer || state.timer <= 0) {
+    if (state.phase !== "auction" || state.auctionPaused || !state.currentPlayer) {
       if (botTimerRef.current) clearTimeout(botTimerRef.current);
       return;
     }
@@ -361,7 +361,6 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
     if (botBidders.length > 0) {
       const fastest = botBidders[0];
       botTimerRef.current = setTimeout(() => {
-        // Re-check validity at bid time
         dispatch({ type: "PLACE_BID", teamId: fastest.teamId });
       }, fastest.delay);
     }
@@ -369,7 +368,8 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
     return () => {
       if (botTimerRef.current) clearTimeout(botTimerRef.current);
     };
-  }, [state.phase, state.auctionPaused, state.currentPlayer, state.currentBid, state.currentBidder, state.timer, state.teams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.phase, state.auctionPaused, state.currentPlayer?.id, state.currentBid, state.currentBidder]);
 
   // Persist room state to localStorage
   useEffect(() => {
