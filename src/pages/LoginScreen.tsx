@@ -14,25 +14,22 @@ export default function LoginScreen() {
   const [name, setName] = useState("");
   const [selectedTeam, setSelectedTeam] = useState("");
   const [joinRoomId, setJoinRoomId] = useState("");
-  const [mode, setMode] = useState<"select" | "create" | "join">("select");
   const [joinError, setJoinError] = useState("");
+
+  // Detect if we're returning from lobby (hot-seat "Add Player")
+  const isAddingPlayer = state.teams.some(t => !t.isBot);
+  const [mode, setMode] = useState<"select" | "create" | "join">(
+    isAddingPlayer ? "join" : "select"
+  );
 
   const takenTeamIds = state.teams.filter(t => !t.isBot).map(t => t.teamId);
 
-  // Load room data from localStorage for join mode
+  // Auto-fill room ID when returning from lobby
   useEffect(() => {
-    if (mode === "join" && joinRoomId.length === 6) {
-      const stored = localStorage.getItem("ipl_auction_room");
-      if (stored) {
-        try {
-          const data = JSON.parse(stored);
-          if (data.roomId === joinRoomId.toUpperCase()) {
-            setJoinError("");
-          }
-        } catch {}
-      }
+    if (isAddingPlayer && mode === "join") {
+      setJoinRoomId(state.roomId);
     }
-  }, [joinRoomId, mode]);
+  }, [isAddingPlayer, mode, state.roomId]);
 
   const handleCreate = () => {
     if (!name.trim() || !selectedTeam) return;
@@ -43,35 +40,52 @@ export default function LoginScreen() {
 
   const handleJoin = () => {
     if (!name.trim() || !selectedTeam) return;
+
+    // If adding player to existing room (hot-seat), skip room validation
+    if (isAddingPlayer) {
+      if (takenTeamIds.includes(selectedTeam)) {
+        setJoinError("This team is already taken!");
+        return;
+      }
+      dispatch({ type: "JOIN_TEAM", teamId: selectedTeam, playerName: name.trim() });
+      dispatch({ type: "SET_PHASE", phase: "lobby" });
+      toast.success(`Joined room ${state.roomId}!`);
+      return;
+    }
     
-    // Check room ID matches
-    const stored = localStorage.getItem("ipl_auction_room");
+    // For fresh join: check room ID against localStorage and current state
     let validRoom = false;
     
-    if (stored) {
-      try {
-        const data = JSON.parse(stored);
-        if (data.roomId === joinRoomId.toUpperCase()) {
-          validRoom = true;
-          // Check if team is already taken
-          if (data.teams) {
-            const takenInRoom = data.teams.filter((t: any) => !t.isBot).map((t: any) => t.teamId);
-            if (takenInRoom.includes(selectedTeam)) {
-              setJoinError("This team is already taken in this room!");
-              return;
-            }
-          }
-        }
-      } catch {}
-    }
-
-    // Also check current state room ID
+    // Check current app state
     if (joinRoomId.toUpperCase() === state.roomId) {
       validRoom = true;
     }
 
+    // Check localStorage (same browser, different tab scenario)
     if (!validRoom) {
-      setJoinError("Invalid Room ID. Please check and try again.");
+      const stored = localStorage.getItem("ipl_auction_room");
+      if (stored) {
+        try {
+          const data = JSON.parse(stored);
+          if (data.roomId === joinRoomId.toUpperCase()) {
+            validRoom = true;
+            // Restore room state if joining from fresh load
+            if (data.teams) {
+              const takenInRoom = data.teams.filter((t: any) => !t.isBot).map((t: any) => t.teamId);
+              if (takenInRoom.includes(selectedTeam)) {
+                setJoinError("This team is already taken in this room!");
+                return;
+              }
+            }
+            // Sync room ID into state
+            dispatch({ type: "SET_ROOM_ID", roomId: data.roomId });
+          }
+        } catch {}
+      }
+    }
+
+    if (!validRoom) {
+      setJoinError("Invalid Room ID. Please check and try again. Note: Join Room works on the same device (hot-seat mode).");
       return;
     }
 
