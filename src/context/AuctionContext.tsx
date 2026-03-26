@@ -9,6 +9,7 @@ import { getBotBidders } from "@/utils/botLogic";
 
 const BOT_STRATEGIES: BotStrategy[] = ["aggressive", "balanced", "budget", "specialist"];
 const POOL_ORDER: PlayerRole[] = ["Batter", "WK", "All-rounder", "Spinner", "Fast Bowler"];
+export const SKIP_CUTOFF_SECONDS = 8;
 
 function createInitialTeams(): TeamSlot[] {
   return IPL_TEAMS.map(t => ({
@@ -39,7 +40,6 @@ function getNextPlayerFromPool(state: GameState): AuctionPlayer | null {
 
   if (available.length === 0) return null;
 
-  // Random pick
   const idx = Math.floor(Math.random() * available.length);
   return available[idx];
 }
@@ -56,7 +56,6 @@ function advanceCategory(state: GameState): Partial<GameState> {
   }
 
   if (nextIdx >= POOL_ORDER.length) {
-    // Check if we need mini-auction
     if (!state.isMiniBidRound && state.unsoldPlayers.length > 0) {
       const teamsNeedPlayers = state.teams.some(t => t.squad.length < 18);
       if (teamsNeedPlayers) {
@@ -100,7 +99,6 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case "START_AUCTION": {
-      // Shuffle player pool
       const pool = [...state.playerPool].sort(() => Math.random() - 0.5);
       const firstPlayer = pool.find(p => p.status === "upcoming" && p.role === POOL_ORDER[0]) || pool.find(p => p.status === "upcoming");
       
@@ -129,6 +127,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         auctionLog: [log2, ...log],
         currentCategoryIndex: 0,
         auctionPaused: false,
+        skippedTeams: [],
+        playerStartTime: Date.now(),
       };
     }
 
@@ -151,6 +151,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           currentBidder: null,
           bids: [],
           timer: TIMER_DURATION,
+          skippedTeams: [],
+          playerStartTime: Date.now(),
           auctionLog: addLog(newState, `📢 ${player.name} is up! Base: ${formatPrice(player.basePrice)} | ${player.role} | ${player.nationality}`, "info"),
         };
       }
@@ -162,6 +164,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         currentBidder: null,
         bids: [],
         timer: TIMER_DURATION,
+        skippedTeams: [],
+        playerStartTime: Date.now(),
         auctionLog: addLog(state, `📢 ${nextPlayer.name} is up! Base: ${formatPrice(nextPlayer.basePrice)} | ${nextPlayer.role} | ${nextPlayer.nationality}`, "info"),
       };
     }
@@ -183,6 +187,23 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         timer: TIMER_DURATION,
         bids: [...state.bids, { teamId: action.teamId, amount: newBid, timestamp: Date.now() }],
         auctionLog: addLog(state, `${teamLabel} bids ${formatPrice(newBid)} for ${state.currentPlayer.name}!`, "bid"),
+        // Remove from skipped if they bid again
+        skippedTeams: state.skippedTeams.filter(id => id !== action.teamId),
+      };
+    }
+
+    case "SKIP_PLAYER": {
+      if (!state.currentPlayer) return state;
+      const team = state.teams.find(t => t.teamId === action.teamId);
+      if (!team) return state;
+      if (state.skippedTeams.includes(action.teamId)) return state;
+
+      const teamLabel = team.isBot ? `🤖 ${team.shortName}` : `👤 ${team.shortName}`;
+
+      return {
+        ...state,
+        skippedTeams: [...state.skippedTeams, action.teamId],
+        auctionLog: addLog(state, `⏭️ ${teamLabel} skips ${state.currentPlayer.name}`, "skip"),
       };
     }
 
@@ -208,7 +229,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           : t
       );
 
-      const playerPool = state.playerPool.map(p =>
+      const updatedPlayerPool = state.playerPool.map(p =>
         p.id === state.currentPlayer!.id ? soldPlayer : p
       );
 
@@ -219,7 +240,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return {
         ...state,
         teams,
-        playerPool,
+        playerPool: updatedPlayerPool,
         unsoldPlayers,
         auctionLog: addLog(state, `✅ SOLD! ${state.currentPlayer.name} goes to ${buyerTeam.shortName} for ${formatPrice(state.currentBid)}!`, "sold"),
       };
@@ -229,16 +250,15 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       if (!state.currentPlayer) return state;
       const unsoldPlayer: AuctionPlayer = { ...state.currentPlayer, status: "unsold" };
 
-      const playerPool = state.playerPool.map(p =>
+      const updatedPlayerPool = state.playerPool.map(p =>
         p.id === state.currentPlayer!.id ? unsoldPlayer : p
       );
 
-      // Add to unsold pool for potential mini-auction (reset status to upcoming)
       const unsoldForLater: AuctionPlayer = { ...state.currentPlayer, status: "upcoming" };
 
       return {
         ...state,
-        playerPool,
+        playerPool: updatedPlayerPool,
         unsoldPlayers: state.isMiniBidRound
           ? state.unsoldPlayers.filter(p => p.id !== state.currentPlayer!.id)
           : [...state.unsoldPlayers, unsoldForLater],
@@ -288,6 +308,8 @@ function createInitialState(): GameState {
     isMiniBidRound: false,
     auctionPaused: false,
     unsoldPlayers: [],
+    skippedTeams: [],
+    playerStartTime: 0,
   };
 }
 
@@ -340,7 +362,6 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
       } else {
         dispatch({ type: "MARK_UNSOLD" });
       }
-      // Move to next player after a short delay
       setTimeout(() => {
         dispatch({ type: "NEXT_PLAYER" });
       }, 1500);
@@ -349,14 +370,15 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(timeout);
   }, [state.timer, state.phase, state.currentPlayer, state.currentBidder]);
 
-  // Bot bidding logic — triggers on bid/player changes, NOT on timer ticks
+  // Bot bidding logic
   useEffect(() => {
     if (state.phase !== "auction" || state.auctionPaused || !state.currentPlayer) {
       if (botTimerRef.current) clearTimeout(botTimerRef.current);
       return;
     }
 
-    const botBidders = getBotBidders(state.teams, state.currentPlayer, state.currentBid, state.currentBidder);
+    const botBidders = getBotBidders(state.teams, state.currentPlayer, state.currentBid, state.currentBidder)
+      .filter(b => !state.skippedTeams.includes(b.teamId));
     
     if (botBidders.length > 0) {
       const fastest = botBidders[0];
@@ -371,15 +393,45 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase, state.auctionPaused, state.currentPlayer?.id, state.currentBid, state.currentBidder]);
 
+  // Bot skip logic — after 8s, bots that aren't interested may skip
+  useEffect(() => {
+    if (state.phase !== "auction" || state.auctionPaused || !state.currentPlayer) return;
+
+    const elapsed = (Date.now() - state.playerStartTime) / 1000;
+    if (elapsed < SKIP_CUTOFF_SECONDS) {
+      const delay = (SKIP_CUTOFF_SECONDS - elapsed) * 1000 + Math.random() * 2000;
+      const timeout = setTimeout(() => {
+        // Bots that haven't bid and aren't the current bidder might skip
+        const botsToSkip = state.teams.filter(t => 
+          t.isBot && 
+          !state.skippedTeams.includes(t.teamId) &&
+          t.teamId !== state.currentBidder
+        );
+        botsToSkip.forEach(bot => {
+          // 40% chance each bot skips after cutoff
+          if (Math.random() < 0.4) {
+            dispatch({ type: "SKIP_PLAYER", teamId: bot.teamId });
+          }
+        });
+      }, delay);
+      return () => clearTimeout(timeout);
+    }
+  }, [state.phase, state.auctionPaused, state.currentPlayer?.id, state.playerStartTime]);
+
   // Persist room state to localStorage
   useEffect(() => {
     if (state.phase !== "login") {
       localStorage.setItem("ipl_auction_room", JSON.stringify({
         roomId: state.roomId,
         phase: state.phase,
+        teams: state.teams.map(t => ({
+          teamId: t.teamId,
+          playerName: t.playerName,
+          isBot: t.isBot,
+        })),
       }));
     }
-  }, [state.roomId, state.phase]);
+  }, [state.roomId, state.phase, state.teams]);
 
   return (
     <AuctionContext.Provider value={{ state, dispatch, getHumanTeams, getActiveHumanTeam }}>

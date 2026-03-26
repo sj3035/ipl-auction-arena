@@ -40,7 +40,7 @@ export interface BidEntry {
 export interface AuctionLogEntry {
   id: string;
   message: string;
-  type: "info" | "bid" | "sold" | "unsold" | "system";
+  type: "info" | "bid" | "sold" | "unsold" | "system" | "skip";
   timestamp: number;
 }
 
@@ -66,6 +66,8 @@ export interface GameState {
   isMiniBidRound: boolean;
   auctionPaused: boolean;
   unsoldPlayers: AuctionPlayer[];
+  skippedTeams: string[]; // teams that skipped current player
+  playerStartTime: number; // timestamp when current player was put up
 }
 
 export type GameAction =
@@ -84,4 +86,5 @@ export type GameAction =
   | { type: "SWITCH_CATEGORY"; category: PoolCategory }
   | { type: "RESET_GAME" }
   | { type: "PAUSE_AUCTION" }
-  | { type: "RESUME_AUCTION" };
+  | { type: "RESUME_AUCTION" }
+  | { type: "SKIP_PLAYER"; teamId: string };

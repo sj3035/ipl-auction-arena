@@ -6,6 +6,7 @@ import { AuctionFeed } from "@/components/auction/AuctionFeed";
 import { PlayerPool } from "@/components/auction/PlayerPool";
 import { CountdownTimer } from "@/components/auction/CountdownTimer";
 import { BidButton } from "@/components/auction/BidButton";
+import { SkipButton } from "@/components/auction/SkipButton";
 import { SquadViewer } from "@/components/auction/SquadViewer";
 import { canTeamBid } from "@/utils/bidUtils";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,11 @@ export default function AuctionRoom() {
     dispatch({ type: "PLACE_BID", teamId: activeTeam.teamId });
   }, [activeTeam, state.currentPlayer, state.currentBid, state.currentBidder, dispatch]);
 
+  const handleSkip = useCallback(() => {
+    if (!activeTeam) return;
+    dispatch({ type: "SKIP_PLAYER", teamId: activeTeam.teamId });
+  }, [activeTeam, dispatch]);
+
   const switchHuman = (dir: number) => {
     const newIdx = (state.activeHumanTeamIndex + dir + humanTeams.length) % humanTeams.length;
     dispatch({ type: "SET_ACTIVE_HUMAN", index: newIdx });
@@ -38,6 +44,9 @@ export default function AuctionRoom() {
   const categoryLabel = state.isMiniBidRound
     ? "Mini-Auction Round"
     : `Round: ${state.poolCategoryOrder[state.currentCategoryIndex] || "Complete"}`;
+
+  const hasSkipped = activeTeam ? state.skippedTeams.includes(activeTeam.teamId) : false;
+  const isLeadingBidder = activeTeam ? state.currentBidder === activeTeam.teamId : false;
 
   const mobileTabs: { id: MobileTab; label: string; icon: React.ReactNode }[] = [
     { id: "auction", label: "Auction", icon: <Gavel className="w-4 h-4" /> },
@@ -85,7 +94,7 @@ export default function AuctionRoom() {
         </div>
 
         {/* Center - Auction Area */}
-        <div className="flex-1 flex flex-col p-4 gap-4 overflow-hidden">
+        <div className="flex-1 flex flex-col p-4 gap-3 overflow-hidden">
           {state.currentPlayer ? (
             <>
               <div className="max-w-md mx-auto w-full">
@@ -99,13 +108,21 @@ export default function AuctionRoom() {
                 <CountdownTimer timer={state.timer} />
               </div>
               {activeTeam && (
-                <div className="max-w-md mx-auto w-full">
-                  <BidButton
-                    team={activeTeam}
-                    currentBid={state.currentBid}
-                    currentBidder={state.currentBidder}
-                    currentPlayer={state.currentPlayer}
-                    onBid={handleBid}
+                <div className="max-w-md mx-auto w-full space-y-2">
+                  {!hasSkipped && (
+                    <BidButton
+                      team={activeTeam}
+                      currentBid={state.currentBid}
+                      currentBidder={state.currentBidder}
+                      currentPlayer={state.currentPlayer}
+                      onBid={handleBid}
+                    />
+                  )}
+                  <SkipButton
+                    timer={state.timer}
+                    hasSkipped={hasSkipped}
+                    isLeadingBidder={isLeadingBidder}
+                    onSkip={handleSkip}
                   />
                 </div>
               )}
@@ -141,15 +158,24 @@ export default function AuctionRoom() {
                   />
                   <CountdownTimer timer={state.timer} />
                   {activeTeam && (
-                    <BidButton
-                      team={activeTeam}
-                      currentBid={state.currentBid}
-                      currentBidder={state.currentBidder}
-                      currentPlayer={state.currentPlayer}
-                      onBid={handleBid}
-                    />
+                    <div className="space-y-2">
+                      {!hasSkipped && (
+                        <BidButton
+                          team={activeTeam}
+                          currentBid={state.currentBid}
+                          currentBidder={state.currentBidder}
+                          currentPlayer={state.currentPlayer}
+                          onBid={handleBid}
+                        />
+                      )}
+                      <SkipButton
+                        timer={state.timer}
+                        hasSkipped={hasSkipped}
+                        isLeadingBidder={isLeadingBidder}
+                        onSkip={handleSkip}
+                      />
+                    </div>
                   )}
-                  {/* Inline mini-feed on mobile auction tab */}
                   <AuctionFeed log={state.auctionLog} compact />
                 </>
               ) : (

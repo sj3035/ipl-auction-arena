@@ -1,17 +1,16 @@
 import { useAuction } from "@/context/AuctionContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Copy, Play, UserMinus, Gavel } from "lucide-react";
+import { Copy, Play, UserMinus, UserPlus, Gavel } from "lucide-react";
 import { toast } from "sonner";
 
 export default function LobbyScreen() {
   const { state, dispatch } = useAuction();
   const humanTeams = state.teams.filter(t => !t.isBot);
-  const isHost = humanTeams.length > 0 && humanTeams[0].teamId === state.teams.find(t => !t.isBot)?.teamId;
 
   const copyRoomId = () => {
     navigator.clipboard.writeText(state.roomId);
-    toast.success("Room ID copied!");
+    toast.success("Room ID copied! Share it with others to join.");
   };
 
   const addPlayer = () => {
@@ -32,6 +31,7 @@ export default function LobbyScreen() {
         <div className="text-center space-y-2">
           <Gavel className="w-8 h-8 mx-auto text-primary" />
           <h1 className="text-3xl font-black text-foreground">AUCTION LOBBY</h1>
+          <p className="text-sm text-muted-foreground">Share the Room ID below for others to join</p>
           <div className="flex items-center justify-center gap-2">
             <span className="text-muted-foreground text-sm">Room:</span>
             <button
@@ -54,7 +54,7 @@ export default function LobbyScreen() {
             {state.teams.map(team => (
               <div
                 key={team.teamId}
-                className={`flex items-center justify-between p-3 rounded-lg border ${
+                className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
                   team.isBot ? "border-border bg-muted/20" : "border-primary/30 bg-primary/5"
                 }`}
               >
@@ -89,6 +89,7 @@ export default function LobbyScreen() {
 
         <div className="flex gap-3">
           <Button onClick={addPlayer} variant="outline" className="flex-1">
+            <UserPlus className="w-4 h-4 mr-2" />
             Add Player (Hot-Seat)
           </Button>
           <Button
@@ -100,6 +101,12 @@ export default function LobbyScreen() {
             Start Auction
           </Button>
         </div>
+
+        {humanTeams.length === 0 && (
+          <p className="text-xs text-center text-muted-foreground">
+            At least 1 human player is required to start the auction
+          </p>
+        )}
       </div>
     </div>
   );
