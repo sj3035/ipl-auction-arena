@@ -131,16 +131,18 @@ export default function LoginScreen() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="w-5 h-5" />
-                {mode === "create" ? "Create Room" : "Join Room"}
+                {isAddingPlayer ? "Add Player (Hot-Seat)" : mode === "create" ? "Create Room" : "Join Room"}
               </CardTitle>
               <CardDescription>
-                {mode === "create"
+                {isAddingPlayer
+                  ? `Adding another player to room ${state.roomId}`
+                  : mode === "create"
                   ? `Room ID: ${state.roomId}`
-                  : "Enter the room ID shared by the host"}
+                  : "Enter the room ID shared by the host (same device only)"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {mode === "join" && (
+              {mode === "join" && !isAddingPlayer && (
                 <div className="space-y-2">
                   <Label>Room ID</Label>
                   <Input
