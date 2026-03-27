@@ -15,7 +15,7 @@ import { ChevronLeft, ChevronRight, Gavel, Users, ListOrdered, MessageSquare } f
 type MobileTab = "auction" | "players" | "teams" | "feed";
 
 export default function AuctionRoom() {
-  const { state, dispatch, getHumanTeams, getActiveHumanTeam } = useAuction();
+  const { state, dispatch, getHumanTeams, getActiveHumanTeam, sendAction } = useAuction();
   const [viewSquadTeamId, setViewSquadTeamId] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>("auction");
 
