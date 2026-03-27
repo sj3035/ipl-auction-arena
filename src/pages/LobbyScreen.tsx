@@ -1,27 +1,63 @@
+import { useEffect, useState, useCallback } from "react";
 import { useAuction } from "@/context/AuctionContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Copy, Play, UserMinus, UserPlus, Gavel } from "lucide-react";
+import { Copy, Play, UserMinus, UserPlus, Gavel, Wifi } from "lucide-react";
 import { toast } from "sonner";
+import { getRoomMembers, leaveRoomDb, subscribeToRoomMembers } from "@/hooks/useRoom";
 
 export default function LobbyScreen() {
   const { state, dispatch } = useAuction();
+  const [syncing, setSyncing] = useState(false);
   const humanTeams = state.teams.filter(t => !t.isBot);
+
+  // Sync members from DB on load and on realtime updates
+  const syncMembers = useCallback(async () => {
+    if (!state.roomDbId) return;
+    setSyncing(true);
+    try {
+      const members = await getRoomMembers(state.roomDbId);
+      // Reset all teams to bot first, then apply DB members
+      const currentTeamIds = members.map(m => m.team_id);
+      
+      // For each team, check if they have a member in DB
+      for (const team of state.teams) {
+        const member = members.find(m => m.team_id === team.teamId);
+        if (member && team.isBot) {
+          dispatch({ type: "JOIN_TEAM", teamId: team.teamId, playerName: member.player_name });
+        } else if (!member && !team.isBot) {
+          // Team was removed from DB but still local — revert to bot
+          dispatch({ type: "LEAVE_TEAM", teamId: team.teamId });
+        }
+      }
+    } finally {
+      setSyncing(false);
+    }
+  }, [state.roomDbId, state.teams, dispatch]);
+
+  // Subscribe to realtime room_members changes
+  useEffect(() => {
+    if (!state.roomDbId) return;
+    syncMembers();
+    const unsubscribe = subscribeToRoomMembers(state.roomDbId, syncMembers);
+    return unsubscribe;
+  }, [state.roomDbId]);
 
   const copyRoomId = () => {
     navigator.clipboard.writeText(state.roomId);
-    toast.success("Room ID copied! Share it with others to join.");
-  };
-
-  const addPlayer = () => {
-    dispatch({ type: "SET_PHASE", phase: "login" });
+    toast.success("Room code copied! Share it with friends to join from any device.");
   };
 
   const startAuction = () => {
     dispatch({ type: "START_AUCTION" });
   };
 
-  const removePlayer = (teamId: string) => {
+  const removePlayer = async (teamId: string) => {
+    if (state.roomDbId) {
+      try {
+        await leaveRoomDb(state.roomDbId, teamId);
+      } catch {}
+    }
     dispatch({ type: "LEAVE_TEAM", teamId });
   };
 
@@ -31,7 +67,9 @@ export default function LobbyScreen() {
         <div className="text-center space-y-2">
           <Gavel className="w-8 h-8 mx-auto text-primary" />
           <h1 className="text-3xl font-black text-foreground">AUCTION LOBBY</h1>
-          <p className="text-sm text-muted-foreground">Share the Room ID below for others to join</p>
+          <p className="text-sm text-muted-foreground">
+            Share the room code — players can join from any device!
+          </p>
           <div className="flex items-center justify-center gap-2">
             <span className="text-muted-foreground text-sm">Room:</span>
             <button
@@ -41,6 +79,11 @@ export default function LobbyScreen() {
               {state.roomId}
               <Copy className="w-3.5 h-3.5 text-muted-foreground" />
             </button>
+          </div>
+          <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
+            <Wifi className="w-3 h-3" />
+            {state.isHost ? "You are the host" : "Connected to room"}
+            {syncing && " • Syncing..."}
           </div>
         </div>
 
@@ -73,12 +116,14 @@ export default function LobbyScreen() {
                       <span className="text-xs bg-primary/20 text-primary px-2 py-1 rounded font-medium">
                         👤 {team.playerName}
                       </span>
-                      <button
-                        onClick={() => removePlayer(team.teamId)}
-                        className="text-muted-foreground hover:text-destructive transition"
-                      >
-                        <UserMinus className="w-3.5 h-3.5" />
-                      </button>
+                      {state.isHost && (
+                        <button
+                          onClick={() => removePlayer(team.teamId)}
+                          className="text-muted-foreground hover:text-destructive transition"
+                        >
+                          <UserMinus className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -88,21 +133,24 @@ export default function LobbyScreen() {
         </Card>
 
         <div className="flex gap-3">
-          <Button onClick={addPlayer} variant="outline" className="flex-1">
-            <UserPlus className="w-4 h-4 mr-2" />
-            Add Player (Hot-Seat)
-          </Button>
-          <Button
-            onClick={startAuction}
-            disabled={humanTeams.length === 0}
-            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white"
-          >
-            <Play className="w-4 h-4 mr-2" />
-            Start Auction
-          </Button>
+          {state.isHost && (
+            <Button
+              onClick={startAuction}
+              disabled={humanTeams.length === 0}
+              className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white"
+            >
+              <Play className="w-4 h-4 mr-2" />
+              Start Auction
+            </Button>
+          )}
+          {!state.isHost && (
+            <p className="text-sm text-center text-muted-foreground w-full">
+              Waiting for host to start the auction...
+            </p>
+          )}
         </div>
 
-        {humanTeams.length === 0 && (
+        {humanTeams.length === 0 && state.isHost && (
           <p className="text-xs text-center text-muted-foreground">
             At least 1 human player is required to start the auction
           </p>
