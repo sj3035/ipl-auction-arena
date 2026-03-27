@@ -51,6 +51,9 @@ export type PoolCategory = "All" | PlayerRole;
 export interface GameState {
   phase: GamePhase;
   roomId: string;
+  roomDbId: string | null; // Supabase room UUID
+  isHost: boolean;
+  sessionId: string;
   teams: TeamSlot[];
   playerPool: AuctionPlayer[];
   currentPlayer: AuctionPlayer | null;
@@ -73,6 +76,8 @@ export interface GameState {
 export type GameAction =
   | { type: "SET_PHASE"; phase: GamePhase }
   | { type: "SET_ROOM_ID"; roomId: string }
+  | { type: "SET_ROOM_DB_ID"; roomDbId: string }
+  | { type: "SET_IS_HOST"; isHost: boolean }
   | { type: "JOIN_TEAM"; teamId: string; playerName: string }
   | { type: "LEAVE_TEAM"; teamId: string }
   | { type: "START_AUCTION" }
@@ -87,4 +92,5 @@ export type GameAction =
   | { type: "RESET_GAME" }
   | { type: "PAUSE_AUCTION" }
   | { type: "RESUME_AUCTION" }
-  | { type: "SKIP_PLAYER"; teamId: string };
+  | { type: "SKIP_PLAYER"; teamId: string }
+  | { type: "SYNC_STATE"; state: Partial<GameState> };
