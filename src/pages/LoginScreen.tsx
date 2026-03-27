@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuction } from "@/context/AuctionContext";
 import { IPL_TEAMS } from "@/data/teams";
 import { Button } from "@/components/ui/button";
@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Gavel, Users, Plus, LogIn, AlertCircle } from "lucide-react";
+import { Gavel, Users, Plus, LogIn, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { createRoom, findRoom, joinRoomDb, getRoomMembers } from "@/hooks/useRoom";
 
 export default function LoginScreen() {
   const { state, dispatch } = useAuction();
@@ -15,113 +16,124 @@ export default function LoginScreen() {
   const [selectedTeam, setSelectedTeam] = useState("");
   const [joinRoomId, setJoinRoomId] = useState("");
   const [joinError, setJoinError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState<"select" | "create" | "join">("select");
+  const [takenTeamIds, setTakenTeamIds] = useState<string[]>([]);
 
-  // Detect if we're returning from lobby (hot-seat "Add Player")
-  const isAddingPlayer = state.teams.some(t => !t.isBot);
-  const [mode, setMode] = useState<"select" | "create" | "join">(
-    isAddingPlayer ? "join" : "select"
-  );
-
-  const takenTeamIds = state.teams.filter(t => !t.isBot).map(t => t.teamId);
-
-  // Auto-fill room ID when returning from lobby
-  useEffect(() => {
-    if (isAddingPlayer && mode === "join") {
-      setJoinRoomId(state.roomId);
-    }
-  }, [isAddingPlayer, mode, state.roomId]);
-
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!name.trim() || !selectedTeam) return;
-    dispatch({ type: "JOIN_TEAM", teamId: selectedTeam, playerName: name.trim() });
-    dispatch({ type: "SET_PHASE", phase: "lobby" });
-    toast.success(`Room created! ID: ${state.roomId}`);
-  };
+    setLoading(true);
+    setJoinError("");
 
-  const handleJoin = () => {
-    if (!name.trim() || !selectedTeam) return;
+    try {
+      const roomCode = state.roomId;
+      const dbId = await createRoom(roomCode);
+      await joinRoomDb(dbId, name.trim(), selectedTeam);
 
-    // If adding player to existing room (hot-seat), skip room validation
-    if (isAddingPlayer) {
-      if (takenTeamIds.includes(selectedTeam)) {
-        setJoinError("This team is already taken!");
-        return;
-      }
+      dispatch({ type: "SET_ROOM_DB_ID", roomDbId: dbId });
+      dispatch({ type: "SET_IS_HOST", isHost: true });
       dispatch({ type: "JOIN_TEAM", teamId: selectedTeam, playerName: name.trim() });
       dispatch({ type: "SET_PHASE", phase: "lobby" });
-      toast.success(`Joined room ${state.roomId}!`);
-      return;
+      toast.success(`Room created! Code: ${roomCode}`);
+    } catch (err: any) {
+      setJoinError(err?.message || "Failed to create room");
+    } finally {
+      setLoading(false);
     }
-    
-    // For fresh join: check room ID against localStorage and current state
-    let validRoom = false;
-    
-    // Check current app state
-    if (joinRoomId.toUpperCase() === state.roomId) {
-      validRoom = true;
-    }
+  };
 
-    // Check localStorage (same browser, different tab scenario)
-    if (!validRoom) {
-      const stored = localStorage.getItem("ipl_auction_room");
-      if (stored) {
-        try {
-          const data = JSON.parse(stored);
-          if (data.roomId === joinRoomId.toUpperCase()) {
-            validRoom = true;
-            // Restore room state if joining from fresh load
-            if (data.teams) {
-              const takenInRoom = data.teams.filter((t: any) => !t.isBot).map((t: any) => t.teamId);
-              if (takenInRoom.includes(selectedTeam)) {
-                setJoinError("This team is already taken in this room!");
-                return;
-              }
-            }
-            // Sync room ID into state
-            dispatch({ type: "SET_ROOM_ID", roomId: data.roomId });
-          }
-        } catch {}
+  const handleJoin = async () => {
+    if (!name.trim() || !selectedTeam || joinRoomId.length < 6) return;
+    setLoading(true);
+    setJoinError("");
+
+    try {
+      const room = await findRoom(joinRoomId.toUpperCase());
+      if (!room) {
+        setJoinError("Room not found. Check the code and try again.");
+        return;
       }
-    }
 
-    if (!validRoom) {
-      setJoinError("Invalid Room ID. Please check and try again. Note: Join Room works on the same device (hot-seat mode).");
-      return;
-    }
+      // Check which teams are taken
+      const members = await getRoomMembers(room.id);
+      const taken = members.map(m => m.team_id);
+      
+      if (taken.includes(selectedTeam)) {
+        setJoinError("This team is already taken in this room!");
+        setTakenTeamIds(taken);
+        return;
+      }
 
-    if (takenTeamIds.includes(selectedTeam)) {
-      setJoinError("This team is already taken!");
-      return;
-    }
+      await joinRoomDb(room.id, name.trim(), selectedTeam);
 
-    dispatch({ type: "JOIN_TEAM", teamId: selectedTeam, playerName: name.trim() });
-    dispatch({ type: "SET_PHASE", phase: "lobby" });
-    toast.success(`Joined room ${joinRoomId.toUpperCase()}!`);
+      // Sync room state: set room info and join team locally
+      dispatch({ type: "SET_ROOM_ID", roomId: room.room_code });
+      dispatch({ type: "SET_ROOM_DB_ID", roomDbId: room.id });
+      dispatch({ type: "SET_IS_HOST", isHost: false });
+
+      // Apply existing members to local state
+      for (const member of members) {
+        dispatch({ type: "JOIN_TEAM", teamId: member.team_id, playerName: member.player_name });
+      }
+      // Join self
+      dispatch({ type: "JOIN_TEAM", teamId: selectedTeam, playerName: name.trim() });
+      dispatch({ type: "SET_PHASE", phase: "lobby" });
+      toast.success(`Joined room ${room.room_code}!`);
+    } catch (err: any) {
+      setJoinError(err?.message || "Failed to join room");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // When switching to join mode, clear taken teams
+  const switchToJoin = () => {
+    setMode("join");
+    setTakenTeamIds([]);
+    setJoinError("");
+  };
+
+  // Fetch taken teams when room code is entered
+  const handleRoomCodeChange = async (value: string) => {
+    const code = value.toUpperCase();
+    setJoinRoomId(code);
+    setJoinError("");
+
+    if (code.length === 6) {
+      const room = await findRoom(code);
+      if (room) {
+        const members = await getRoomMembers(room.id);
+        setTakenTeamIds(members.map(m => m.team_id));
+      } else {
+        setTakenTeamIds([]);
+      }
+    } else {
+      setTakenTeamIds([]);
+    }
   };
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-6">
-        {/* Logo */}
         <div className="text-center space-y-2">
           <div className="flex items-center justify-center gap-2 text-primary">
             <Gavel className="w-10 h-10" />
           </div>
           <h1 className="text-4xl font-black tracking-tight text-foreground">IPL AUCTION</h1>
-          <p className="text-muted-foreground">Simulator</p>
+          <p className="text-muted-foreground">Real-Time Multiplayer Simulator</p>
         </div>
 
         {mode === "select" ? (
           <Card className="bg-card border-border">
             <CardHeader className="text-center">
               <CardTitle>Get Started</CardTitle>
-              <CardDescription>Create a new room or join an existing one</CardDescription>
+              <CardDescription>Create a new room or join one on any device</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <Button onClick={() => setMode("create")} className="w-full h-12" variant="default">
                 <Plus className="w-4 h-4 mr-2" /> Create Room
               </Button>
-              <Button onClick={() => setMode("join")} className="w-full h-12" variant="outline">
+              <Button onClick={switchToJoin} className="w-full h-12" variant="outline">
                 <LogIn className="w-4 h-4 mr-2" /> Join Room
               </Button>
             </CardContent>
@@ -131,36 +143,32 @@ export default function LoginScreen() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="w-5 h-5" />
-                {isAddingPlayer ? "Add Player (Hot-Seat)" : mode === "create" ? "Create Room" : "Join Room"}
+                {mode === "create" ? "Create Room" : "Join Room"}
               </CardTitle>
               <CardDescription>
-                {isAddingPlayer
-                  ? `Adding another player to room ${state.roomId}`
-                  : mode === "create"
-                  ? `Room ID: ${state.roomId}`
-                  : "Enter the room ID shared by the host (same device only)"}
+                {mode === "create"
+                  ? `Your Room Code: ${state.roomId}`
+                  : "Enter the room code shared by the host"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {mode === "join" && !isAddingPlayer && (
+              {mode === "join" && (
                 <div className="space-y-2">
-                  <Label>Room ID</Label>
+                  <Label>Room Code</Label>
                   <Input
                     value={joinRoomId}
-                    onChange={e => {
-                      setJoinRoomId(e.target.value.toUpperCase());
-                      setJoinError("");
-                    }}
-                    placeholder="Enter 6-character room ID"
+                    onChange={e => handleRoomCodeChange(e.target.value)}
+                    placeholder="Enter 6-character room code"
                     maxLength={6}
                     className="font-mono text-lg tracking-widest text-center"
                   />
-                  {joinError && (
-                    <p className="text-xs text-destructive flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" /> {joinError}
-                    </p>
-                  )}
                 </div>
+              )}
+
+              {joinError && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> {joinError}
+                </p>
               )}
 
               <div className="space-y-2">
@@ -202,9 +210,10 @@ export default function LoginScreen() {
                 </Button>
                 <Button
                   onClick={mode === "create" ? handleCreate : handleJoin}
-                  disabled={!name.trim() || !selectedTeam || (mode === "join" && joinRoomId.length < 6)}
+                  disabled={loading || !name.trim() || !selectedTeam || (mode === "join" && joinRoomId.length < 6)}
                   className="flex-1"
                 >
+                  {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                   {mode === "create" ? "Create & Join" : "Join Room"}
                 </Button>
               </div>
