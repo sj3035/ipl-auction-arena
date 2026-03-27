@@ -28,13 +28,13 @@ export default function AuctionRoom() {
     if (!activeTeam || !state.currentPlayer) return;
     const { canBid } = canTeamBid(activeTeam, state.currentBid, state.currentBidder, state.currentPlayer);
     if (!canBid) return;
-    dispatch({ type: "PLACE_BID", teamId: activeTeam.teamId });
-  }, [activeTeam, state.currentPlayer, state.currentBid, state.currentBidder, dispatch]);
+    sendAction({ type: "PLACE_BID", teamId: activeTeam.teamId });
+  }, [activeTeam, state.currentPlayer, state.currentBid, state.currentBidder, sendAction]);
 
   const handleSkip = useCallback(() => {
     if (!activeTeam) return;
-    dispatch({ type: "SKIP_PLAYER", teamId: activeTeam.teamId });
-  }, [activeTeam, dispatch]);
+    sendAction({ type: "SKIP_PLAYER", teamId: activeTeam.teamId });
+  }, [activeTeam, sendAction]);
 
   const switchHuman = (dir: number) => {
     const newIdx = (state.activeHumanTeamIndex + dir + humanTeams.length) % humanTeams.length;
