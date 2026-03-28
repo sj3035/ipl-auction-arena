@@ -29,6 +29,11 @@ function getRoleNeed(team: TeamSlot, role: PlayerRole): number {
   return 0.3;
 }
 
+/** Count marquee players in a team's squad */
+function getMarqueeCount(squad: AuctionPlayer[]): number {
+  return squad.filter(p => p.rating >= 10).length;
+}
+
 /** Calculate interest probability based on strategy */
 function getInterestProbability(
   bot: TeamSlot,
@@ -36,11 +41,17 @@ function getInterestProbability(
   strategy: BotStrategy,
   isMarquee: boolean = false
 ): number {
-  // Marquee players: very high interest from all strategies
+  // Marquee players: ensure each bot gets 1-2 marquee players
   if (isMarquee) {
+    const marqueeOwned = getMarqueeCount(bot.squad);
     const purseFactor = bot.purse / 12000;
-    if (purseFactor < 0.5) return 0.3; // Low purse, less interested
-    return strategy === "aggressive" ? 0.95 : strategy === "balanced" ? 0.85 : strategy === "specialist" ? 0.8 : 0.6;
+    if (purseFactor < 0.3) return 0.05; // Can't afford
+    // Already has 2+ marquee: very low interest
+    if (marqueeOwned >= 2) return 0.05;
+    // Has 0 marquee: extremely high interest (must get at least 1)
+    if (marqueeOwned === 0) return 0.98;
+    // Has 1 marquee: moderate-high interest for a second
+    return strategy === "aggressive" ? 0.85 : strategy === "balanced" ? 0.7 : strategy === "specialist" ? 0.65 : 0.5;
   }
 
   const roleNeed = getRoleNeed(bot, player.role);

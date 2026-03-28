@@ -48,7 +48,11 @@ export function PlayerPool({ players, currentPlayerId, mobile }: PlayerPoolProps
             <ScrollArea className={scrollHeight}>
               <div className="space-y-1 pr-2">
                 {players
-                  .filter(p => c.value === "All" || p.role === c.value)
+                  .filter(p =>
+                    c.value === "All" ? true :
+                    c.value === "Marquee" ? p.rating >= MARQUEE_RATING :
+                    p.role === c.value
+                  )
                   .map(p => (
                     <div
                       key={p.id}
