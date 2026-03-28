@@ -36,16 +36,23 @@ function addLog(state: GameState, message: string, type: AuctionLogEntry["type"]
 }
 
 function getNextPlayerFromPool(state: GameState): AuctionPlayer | null {
+  const pool = state.isMiniBidRound ? state.unsoldPlayers : state.playerPool;
+
+  if (state.isMarqueeRound) {
+    // Marquee: all 10-star players regardless of role
+    const marquee = pool.filter(p => p.status === "upcoming" && p.rating >= MARQUEE_RATING);
+    if (marquee.length === 0) return null;
+    return marquee[Math.floor(Math.random() * marquee.length)];
+  }
+
   const category = POOL_ORDER[state.currentCategoryIndex];
   if (!category) return null;
 
-  const pool = state.isMiniBidRound ? state.unsoldPlayers : state.playerPool;
-  const available = pool.filter(p => p.status === "upcoming" && p.role === category);
-
+  // Non-marquee players only (rating < 10)
+  const available = pool.filter(p => p.status === "upcoming" && p.role === category && p.rating < MARQUEE_RATING);
   if (available.length === 0) return null;
 
-  const idx = Math.floor(Math.random() * available.length);
-  return available[idx];
+  return available[Math.floor(Math.random() * available.length)];
 }
 
 function advanceCategory(state: GameState): Partial<GameState> {
