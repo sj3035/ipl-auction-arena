@@ -555,7 +555,8 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const botBidders = getBotBidders(state.teams, state.currentPlayer, state.currentBid, state.currentBidder)
+    const isMarquee = state.isMarqueeRound;
+    const botBidders = getBotBidders(state.teams, state.currentPlayer, state.currentBid, state.currentBidder, isMarquee)
       .filter(b => !state.skippedTeams.includes(b.teamId));
     
     if (botBidders.length > 0) {
