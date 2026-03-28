@@ -193,9 +193,10 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case "NEXT_PLAYER": {
-      const nextPlayer = getNextPlayerFromPool(state);
+      const updatedBatchState = { ...state, categoryBatchIndex: state.categoryBatchIndex + 1 };
+      const nextPlayer = getNextPlayerFromPool(updatedBatchState);
       if (!nextPlayer) {
-        const advanced = advanceCategory(state);
+        const advanced = advanceCategory(updatedBatchState);
         if (advanced.phase === "end") {
           return { ...state, ...advanced, currentPlayer: null, auctionLog: addLog(state, "🏆 Auction is complete!", "system") };
         }
@@ -204,6 +205,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         if (!player) {
           return { ...state, phase: "end", currentPlayer: null, auctionLog: addLog(state, "🏆 Auction is complete!", "system") };
         }
+        const marqueeLabel = newState.isMarqueeRound ? "⭐ " : "";
         return {
           ...newState,
           currentPlayer: player,
@@ -213,12 +215,13 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           timer: TIMER_DURATION,
           skippedTeams: [],
           playerStartTime: Date.now(),
-          auctionLog: addLog(newState, `📢 ${player.name} is up! Base: ${formatPrice(player.basePrice)} | ${player.role} | ${player.nationality}`, "info"),
+          auctionLog: addLog(newState, `${marqueeLabel}📢 ${player.name} is up! Base: ${formatPrice(player.basePrice)} | ${player.role} | ${player.nationality}`, "info"),
         };
       }
 
+      const marqueeLabel = updatedBatchState.isMarqueeRound ? "⭐ " : "";
       return {
-        ...state,
+        ...updatedBatchState,
         currentPlayer: nextPlayer,
         currentBid: nextPlayer.basePrice,
         currentBidder: null,
@@ -226,7 +229,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         timer: TIMER_DURATION,
         skippedTeams: [],
         playerStartTime: Date.now(),
-        auctionLog: addLog(state, `📢 ${nextPlayer.name} is up! Base: ${formatPrice(nextPlayer.basePrice)} | ${nextPlayer.role} | ${nextPlayer.nationality}`, "info"),
+        auctionLog: addLog(updatedBatchState, `${marqueeLabel}📢 ${nextPlayer.name} is up! Base: ${formatPrice(nextPlayer.basePrice)} | ${nextPlayer.role} | ${nextPlayer.nationality}`, "info"),
       };
     }
 
