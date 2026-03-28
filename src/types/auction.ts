@@ -67,6 +67,9 @@ export interface GameState {
   poolCategoryOrder: PlayerRole[];
   currentCategoryIndex: number;
   isMiniBidRound: boolean;
+  isMarqueeRound: boolean;
+  marqueeBatchIndex: number; // which batch of 10 per category we're on
+  categoryBatchIndex: number; // which batch of 10 within current category
   auctionPaused: boolean;
   unsoldPlayers: AuctionPlayer[];
   skippedTeams: string[]; // teams that skipped current player

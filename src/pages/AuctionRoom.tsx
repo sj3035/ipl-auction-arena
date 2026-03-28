@@ -32,21 +32,21 @@ export default function AuctionRoom() {
   }, [activeTeam, state.currentPlayer, state.currentBid, state.currentBidder, sendAction]);
 
   const handleSkip = useCallback(() => {
-    if (!activeTeam) return;
-    sendAction({ type: "SKIP_PLAYER", teamId: activeTeam.teamId });
-  }, [activeTeam, sendAction]);
+    if (!state.isHost) return;
+    sendAction({ type: "SKIP_PLAYER", teamId: "" });
+    setTimeout(() => sendAction({ type: "NEXT_PLAYER" }), 500);
+  }, [state.isHost, sendAction]);
 
   const switchHuman = (dir: number) => {
     const newIdx = (state.activeHumanTeamIndex + dir + humanTeams.length) % humanTeams.length;
     dispatch({ type: "SET_ACTIVE_HUMAN", index: newIdx });
   };
 
-  const categoryLabel = state.isMiniBidRound
-    ? "Mini-Auction Round"
-    : `Round: ${state.poolCategoryOrder[state.currentCategoryIndex] || "Complete"}`;
-
-  const hasSkipped = activeTeam ? state.skippedTeams.includes(activeTeam.teamId) : false;
-  const isLeadingBidder = activeTeam ? state.currentBidder === activeTeam.teamId : false;
+  const categoryLabel = state.isMarqueeRound
+    ? "⭐ Marquee Round"
+    : state.isMiniBidRound
+      ? "Mini-Auction Round"
+      : `Round: ${state.poolCategoryOrder[state.currentCategoryIndex] || "Complete"}`;
 
   const mobileTabs: { id: MobileTab; label: string; icon: React.ReactNode }[] = [
     { id: "auction", label: "Auction", icon: <Gavel className="w-4 h-4" /> },
@@ -109,19 +109,15 @@ export default function AuctionRoom() {
               </div>
               {activeTeam && (
                 <div className="max-w-md mx-auto w-full space-y-2">
-                  {!hasSkipped && (
-                    <BidButton
-                      team={activeTeam}
-                      currentBid={state.currentBid}
-                      currentBidder={state.currentBidder}
-                      currentPlayer={state.currentPlayer}
-                      onBid={handleBid}
-                    />
-                  )}
+                  <BidButton
+                    team={activeTeam}
+                    currentBid={state.currentBid}
+                    currentBidder={state.currentBidder}
+                    currentPlayer={state.currentPlayer}
+                    onBid={handleBid}
+                  />
                   <SkipButton
-                    timer={state.timer}
-                    hasSkipped={hasSkipped}
-                    isLeadingBidder={isLeadingBidder}
+                    isHost={state.isHost}
                     onSkip={handleSkip}
                   />
                 </div>
@@ -159,19 +155,15 @@ export default function AuctionRoom() {
                   <CountdownTimer timer={state.timer} />
                   {activeTeam && (
                     <div className="space-y-2">
-                      {!hasSkipped && (
-                        <BidButton
-                          team={activeTeam}
-                          currentBid={state.currentBid}
-                          currentBidder={state.currentBidder}
-                          currentPlayer={state.currentPlayer}
-                          onBid={handleBid}
-                        />
-                      )}
+                      <BidButton
+                        team={activeTeam}
+                        currentBid={state.currentBid}
+                        currentBidder={state.currentBidder}
+                        currentPlayer={state.currentPlayer}
+                        onBid={handleBid}
+                      />
                       <SkipButton
-                        timer={state.timer}
-                        hasSkipped={hasSkipped}
-                        isLeadingBidder={isLeadingBidder}
+                        isHost={state.isHost}
                         onSkip={handleSkip}
                       />
                     </div>

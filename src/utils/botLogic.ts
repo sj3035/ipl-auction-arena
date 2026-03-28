@@ -33,11 +33,19 @@ function getRoleNeed(team: TeamSlot, role: PlayerRole): number {
 function getInterestProbability(
   bot: TeamSlot,
   player: AuctionPlayer,
-  strategy: BotStrategy
+  strategy: BotStrategy,
+  isMarquee: boolean = false
 ): number {
+  // Marquee players: very high interest from all strategies
+  if (isMarquee) {
+    const purseFactor = bot.purse / 12000;
+    if (purseFactor < 0.5) return 0.3; // Low purse, less interested
+    return strategy === "aggressive" ? 0.95 : strategy === "balanced" ? 0.85 : strategy === "specialist" ? 0.8 : 0.6;
+  }
+
   const roleNeed = getRoleNeed(bot, player.role);
   const ratingFactor = player.rating / 10;
-  const purseFactor = bot.purse / 12000; // How much purse remains
+  const purseFactor = bot.purse / 12000;
   const squadFactor = bot.squad.length < 10 ? 0.8 : bot.squad.length < 15 ? 0.5 : 0.3;
 
   let base: number;
@@ -69,23 +77,32 @@ function getInterestProbability(
 function getMaxBidCeiling(
   player: AuctionPlayer,
   strategy: BotStrategy,
-  roleNeed: number
+  roleNeed: number,
+  isMarquee: boolean = false
 ): number {
+  // Marquee players (rating 10): aggressive bidding 10-20 Cr range (1000-2000 Lakhs)
+  if (isMarquee) {
+    const minCeiling = 1000; // 10 Cr
+    const maxCeiling = 2000; // 20 Cr
+    const aggressiveness = strategy === "aggressive" ? 0.8 : strategy === "balanced" ? 0.5 : strategy === "specialist" ? 0.6 : 0.3;
+    return Math.round(minCeiling + (maxCeiling - minCeiling) * (aggressiveness + Math.random() * 0.3));
+  }
+
   let multiplier: number;
   switch (strategy) {
     case "aggressive":
-      multiplier = 2.5 + Math.random() * 1.0; // 2.5-3.5x
+      multiplier = 2.5 + Math.random() * 1.0;
       if (player.rating >= 9) multiplier += 0.5;
       break;
     case "balanced":
-      multiplier = 1.8 + Math.random() * 0.7; // 1.8-2.5x
+      multiplier = 1.8 + Math.random() * 0.7;
       multiplier += roleNeed * 0.3;
       break;
     case "budget":
-      multiplier = 1.3 + Math.random() * 0.5; // 1.3-1.8x
+      multiplier = 1.3 + Math.random() * 0.5;
       break;
     case "specialist":
-      multiplier = 2.0 + Math.random() * 1.0; // 2.0-3.0x
+      multiplier = 2.0 + Math.random() * 1.0;
       if (roleNeed > 0.7) multiplier += 0.5;
       break;
   }
@@ -97,17 +114,17 @@ export function botShouldBid(
   bot: TeamSlot,
   player: AuctionPlayer,
   currentBid: number,
-  currentBidder: string | null
+  currentBidder: string | null,
+  isMarquee: boolean = false
 ): BotDecision {
   const strategy = bot.botStrategy || "balanced";
   
-  // Check if can bid at all
   const { canBid } = canTeamBid(bot, currentBid, currentBidder, player);
   if (!canBid) return { shouldBid: false, delay: 0 };
 
-  const interest = getInterestProbability(bot, player, strategy);
+  const interest = getInterestProbability(bot, player, strategy, isMarquee);
   const roleNeed = getRoleNeed(bot, player.role);
-  const maxCeiling = getMaxBidCeiling(player, strategy, roleNeed);
+  const maxCeiling = getMaxBidCeiling(player, strategy, roleNeed, isMarquee);
   const nextBid = currentBid + getBidIncrement(currentBid);
 
   // Check if next bid exceeds ceiling
@@ -124,7 +141,8 @@ export function botShouldBid(
     return { shouldBid: false, delay: 0 };
   }
 
-  const delay = 2000 + Math.random() * 3000; // 2-5 seconds
+  // Marquee: faster bidding
+  const delay = isMarquee ? (1000 + Math.random() * 2000) : (2000 + Math.random() * 3000);
   return { shouldBid: true, delay };
 }
 
@@ -133,13 +151,14 @@ export function getBotBidders(
   teams: TeamSlot[],
   player: AuctionPlayer,
   currentBid: number,
-  currentBidder: string | null
+  currentBidder: string | null,
+  isMarquee: boolean = false
 ): Array<{ teamId: string; delay: number }> {
   const bidders: Array<{ teamId: string; delay: number }> = [];
   
   for (const team of teams) {
     if (!team.isBot) continue;
-    const decision = botShouldBid(team, player, currentBid, currentBidder);
+    const decision = botShouldBid(team, player, currentBid, currentBidder, isMarquee);
     if (decision.shouldBid) {
       bidders.push({ teamId: team.teamId, delay: decision.delay });
     }

@@ -11,8 +11,9 @@ import { getSessionId } from "@/hooks/useSessionId";
 
 const BOT_STRATEGIES: BotStrategy[] = ["aggressive", "balanced", "budget", "specialist"];
 const POOL_ORDER: PlayerRole[] = ["Batter", "WK", "All-rounder", "Spinner", "Fast Bowler"];
-export const SKIP_CUTOFF_SECONDS = 8;
 export const AUTO_SKIP_SECONDS = 8;
+const BATCH_SIZE = 10;
+const MARQUEE_RATING = 10;
 
 function createInitialTeams(): TeamSlot[] {
   return IPL_TEAMS.map(t => ({
@@ -35,36 +36,71 @@ function addLog(state: GameState, message: string, type: AuctionLogEntry["type"]
 }
 
 function getNextPlayerFromPool(state: GameState): AuctionPlayer | null {
+  const pool = state.isMiniBidRound ? state.unsoldPlayers : state.playerPool;
+
+  if (state.isMarqueeRound) {
+    // Marquee: all 10-star players regardless of role
+    const marquee = pool.filter(p => p.status === "upcoming" && p.rating >= MARQUEE_RATING);
+    if (marquee.length === 0) return null;
+    return marquee[Math.floor(Math.random() * marquee.length)];
+  }
+
   const category = POOL_ORDER[state.currentCategoryIndex];
   if (!category) return null;
 
-  const pool = state.isMiniBidRound ? state.unsoldPlayers : state.playerPool;
-  const available = pool.filter(p => p.status === "upcoming" && p.role === category);
-
+  // Non-marquee players only (rating < 10)
+  const available = pool.filter(p => p.status === "upcoming" && p.role === category && p.rating < MARQUEE_RATING);
   if (available.length === 0) return null;
 
-  const idx = Math.floor(Math.random() * available.length);
-  return available[idx];
+  return available[Math.floor(Math.random() * available.length)];
 }
 
 function advanceCategory(state: GameState): Partial<GameState> {
-  let nextIdx = state.currentCategoryIndex + 1;
-  
-  while (nextIdx < POOL_ORDER.length) {
-    const cat = POOL_ORDER[nextIdx];
-    const pool = state.isMiniBidRound ? state.unsoldPlayers : state.playerPool;
-    const available = pool.filter(p => p.status === "upcoming" && p.role === cat);
-    if (available.length > 0) break;
-    nextIdx++;
+  const pool = state.isMiniBidRound ? state.unsoldPlayers : state.playerPool;
+
+  // If marquee round, check if marquee players remain
+  if (state.isMarqueeRound) {
+    const marqueeLeft = pool.filter(p => p.status === "upcoming" && p.rating >= MARQUEE_RATING);
+    if (marqueeLeft.length > 0) return {}; // stay in marquee
+    // Marquee done, move to category rounds
+    return {
+      isMarqueeRound: false,
+      currentCategoryIndex: 0,
+      categoryBatchIndex: 0,
+      auctionLog: addLog(state, "🏏 Marquee round complete! Moving to category rounds.", "system"),
+    };
   }
 
-  if (nextIdx >= POOL_ORDER.length) {
+  // Category batch logic: serve BATCH_SIZE per category, then rotate
+  const category = POOL_ORDER[state.currentCategoryIndex];
+  const availableInCat = pool.filter(p => p.status === "upcoming" && p.role === category && p.rating < MARQUEE_RATING);
+  
+  // If current category still has players and we haven't exhausted the batch, stay
+  if (availableInCat.length > 0 && state.categoryBatchIndex < BATCH_SIZE) {
+    return {};
+  }
+
+  // Move to next category with available players
+  let nextIdx = (state.currentCategoryIndex + 1) % POOL_ORDER.length;
+  let checked = 0;
+  while (checked < POOL_ORDER.length) {
+    const cat = POOL_ORDER[nextIdx];
+    const available = pool.filter(p => p.status === "upcoming" && p.role === cat && p.rating < MARQUEE_RATING);
+    if (available.length > 0) break;
+    nextIdx = (nextIdx + 1) % POOL_ORDER.length;
+    checked++;
+  }
+
+  if (checked >= POOL_ORDER.length) {
+    // All categories exhausted
     if (!state.isMiniBidRound && state.unsoldPlayers.length > 0) {
       const teamsNeedPlayers = state.teams.some(t => t.squad.length < 18);
       if (teamsNeedPlayers) {
         return {
           currentCategoryIndex: 0,
+          categoryBatchIndex: 0,
           isMiniBidRound: true,
+          isMarqueeRound: false,
           auctionLog: addLog(state, "🔄 Mini-auction round begins! Unsold players return to the pool.", "system"),
         };
       }
@@ -72,7 +108,11 @@ function advanceCategory(state: GameState): Partial<GameState> {
     return { phase: "end" as GamePhase };
   }
 
-  return { currentCategoryIndex: nextIdx };
+  return {
+    currentCategoryIndex: nextIdx,
+    categoryBatchIndex: 0,
+    auctionLog: addLog(state, `📋 Now auctioning: ${POOL_ORDER[nextIdx]}s`, "system"),
+  };
 }
 
 function gameReducer(state: GameState, action: GameAction): GameState {
@@ -114,13 +154,16 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
     case "START_AUCTION": {
       const pool = [...state.playerPool].sort(() => Math.random() - 0.5);
-      const firstPlayer = pool.find(p => p.status === "upcoming" && p.role === POOL_ORDER[0]) || pool.find(p => p.status === "upcoming");
+      // Start with marquee players (rating 10)
+      const marqueeFirst = pool.find(p => p.status === "upcoming" && p.rating >= MARQUEE_RATING);
+      const firstPlayer = marqueeFirst || pool.find(p => p.status === "upcoming");
       
       if (!firstPlayer) return state;
 
+      const isMarquee = !!marqueeFirst;
       const log = addLog(
         { ...state, auctionLog: [] },
-        `🏏 IPL Auction begins! First category: ${POOL_ORDER[0]}s`,
+        isMarquee ? `⭐ IPL Auction begins! MARQUEE ROUND - Elite players first!` : `🏏 IPL Auction begins! First category: ${POOL_ORDER[0]}s`,
         "system"
       );
       const log2: AuctionLogEntry = {
@@ -143,13 +186,17 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         auctionPaused: false,
         skippedTeams: [],
         playerStartTime: Date.now(),
+        isMarqueeRound: isMarquee,
+        marqueeBatchIndex: 0,
+        categoryBatchIndex: 0,
       };
     }
 
     case "NEXT_PLAYER": {
-      const nextPlayer = getNextPlayerFromPool(state);
+      const updatedBatchState = { ...state, categoryBatchIndex: state.categoryBatchIndex + 1 };
+      const nextPlayer = getNextPlayerFromPool(updatedBatchState);
       if (!nextPlayer) {
-        const advanced = advanceCategory(state);
+        const advanced = advanceCategory(updatedBatchState);
         if (advanced.phase === "end") {
           return { ...state, ...advanced, currentPlayer: null, auctionLog: addLog(state, "🏆 Auction is complete!", "system") };
         }
@@ -158,6 +205,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         if (!player) {
           return { ...state, phase: "end", currentPlayer: null, auctionLog: addLog(state, "🏆 Auction is complete!", "system") };
         }
+        const marqueeLabel = newState.isMarqueeRound ? "⭐ " : "";
         return {
           ...newState,
           currentPlayer: player,
@@ -167,12 +215,13 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           timer: TIMER_DURATION,
           skippedTeams: [],
           playerStartTime: Date.now(),
-          auctionLog: addLog(newState, `📢 ${player.name} is up! Base: ${formatPrice(player.basePrice)} | ${player.role} | ${player.nationality}`, "info"),
+          auctionLog: addLog(newState, `${marqueeLabel}📢 ${player.name} is up! Base: ${formatPrice(player.basePrice)} | ${player.role} | ${player.nationality}`, "info"),
         };
       }
 
+      const marqueeLabel = updatedBatchState.isMarqueeRound ? "⭐ " : "";
       return {
-        ...state,
+        ...updatedBatchState,
         currentPlayer: nextPlayer,
         currentBid: nextPlayer.basePrice,
         currentBidder: null,
@@ -180,7 +229,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         timer: TIMER_DURATION,
         skippedTeams: [],
         playerStartTime: Date.now(),
-        auctionLog: addLog(state, `📢 ${nextPlayer.name} is up! Base: ${formatPrice(nextPlayer.basePrice)} | ${nextPlayer.role} | ${nextPlayer.nationality}`, "info"),
+        auctionLog: addLog(updatedBatchState, `${marqueeLabel}📢 ${nextPlayer.name} is up! Base: ${formatPrice(nextPlayer.basePrice)} | ${nextPlayer.role} | ${nextPlayer.nationality}`, "info"),
       };
     }
 
@@ -206,17 +255,22 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case "SKIP_PLAYER": {
+      // Host-only skip: immediately move to next player
       if (!state.currentPlayer) return state;
-      const team = state.teams.find(t => t.teamId === action.teamId);
-      if (!team) return state;
-      if (state.skippedTeams.includes(action.teamId)) return state;
 
-      const teamLabel = team.isBot ? `🤖 ${team.shortName}` : `👤 ${team.shortName}`;
+      const unsoldPlayer: AuctionPlayer = { ...state.currentPlayer, status: "unsold" };
+      const updatedPlayerPool = state.playerPool.map(p =>
+        p.id === state.currentPlayer!.id ? unsoldPlayer : p
+      );
+      const unsoldForLater: AuctionPlayer = { ...state.currentPlayer, status: "upcoming" };
 
       return {
         ...state,
-        skippedTeams: [...state.skippedTeams, action.teamId],
-        auctionLog: addLog(state, `⏭️ ${teamLabel} skips ${state.currentPlayer.name}`, "skip"),
+        playerPool: updatedPlayerPool,
+        unsoldPlayers: state.isMiniBidRound
+          ? state.unsoldPlayers.filter(p => p.id !== state.currentPlayer!.id)
+          : [...state.unsoldPlayers, unsoldForLater],
+        auctionLog: addLog(state, `⏭️ Host skips ${state.currentPlayer.name}`, "skip"),
       };
     }
 
@@ -322,6 +376,9 @@ function createInitialState(): GameState {
     poolCategoryOrder: POOL_ORDER,
     currentCategoryIndex: 0,
     isMiniBidRound: false,
+    isMarqueeRound: false,
+    marqueeBatchIndex: 0,
+    categoryBatchIndex: 0,
     auctionPaused: false,
     unsoldPlayers: [],
     skippedTeams: [],
@@ -498,7 +555,8 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const botBidders = getBotBidders(state.teams, state.currentPlayer, state.currentBid, state.currentBidder)
+    const isMarquee = state.isMarqueeRound;
+    const botBidders = getBotBidders(state.teams, state.currentPlayer, state.currentBid, state.currentBidder, isMarquee)
       .filter(b => !state.skippedTeams.includes(b.teamId));
     
     if (botBidders.length > 0) {
@@ -514,29 +572,7 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase, state.auctionPaused, state.currentPlayer?.id, state.currentBid, state.currentBidder, state.isHost]);
 
-  // Bot skip logic (host only)
-  useEffect(() => {
-    if (!state.isHost) return;
-    if (state.phase !== "auction" || state.auctionPaused || !state.currentPlayer) return;
-
-    const elapsed = (Date.now() - state.playerStartTime) / 1000;
-    if (elapsed < SKIP_CUTOFF_SECONDS) {
-      const delay = (SKIP_CUTOFF_SECONDS - elapsed) * 1000 + Math.random() * 2000;
-      const timeout = setTimeout(() => {
-        const botsToSkip = state.teams.filter(t => 
-          t.isBot && 
-          !state.skippedTeams.includes(t.teamId) &&
-          t.teamId !== state.currentBidder
-        );
-        botsToSkip.forEach(bot => {
-          if (Math.random() < 0.4) {
-            dispatch({ type: "SKIP_PLAYER", teamId: bot.teamId });
-          }
-        });
-      }, delay);
-      return () => clearTimeout(timeout);
-    }
-  }, [state.phase, state.auctionPaused, state.currentPlayer?.id, state.playerStartTime, state.isHost]);
+  // Skip is now host-only via UI button, no bot skip logic needed
 
   return (
     <AuctionContext.Provider value={{ state, dispatch, getHumanTeams, getActiveHumanTeam, sendAction }}>
