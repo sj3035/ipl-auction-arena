@@ -32,9 +32,10 @@ export default function AuctionRoom() {
   }, [activeTeam, state.currentPlayer, state.currentBid, state.currentBidder, sendAction]);
 
   const handleSkip = useCallback(() => {
-    if (!activeTeam) return;
-    sendAction({ type: "SKIP_PLAYER", teamId: activeTeam.teamId });
-  }, [activeTeam, sendAction]);
+    if (!state.isHost) return;
+    sendAction({ type: "SKIP_PLAYER", teamId: "" });
+    setTimeout(() => sendAction({ type: "NEXT_PLAYER" }), 500);
+  }, [state.isHost, sendAction]);
 
   const switchHuman = (dir: number) => {
     const newIdx = (state.activeHumanTeamIndex + dir + humanTeams.length) % humanTeams.length;
