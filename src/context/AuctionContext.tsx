@@ -11,8 +11,9 @@ import { getSessionId } from "@/hooks/useSessionId";
 
 const BOT_STRATEGIES: BotStrategy[] = ["aggressive", "balanced", "budget", "specialist"];
 const POOL_ORDER: PlayerRole[] = ["Batter", "WK", "All-rounder", "Spinner", "Fast Bowler"];
-export const SKIP_CUTOFF_SECONDS = 8;
 export const AUTO_SKIP_SECONDS = 8;
+const BATCH_SIZE = 10;
+const MARQUEE_RATING = 10;
 
 function createInitialTeams(): TeamSlot[] {
   return IPL_TEAMS.map(t => ({
