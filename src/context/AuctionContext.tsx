@@ -255,17 +255,22 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case "SKIP_PLAYER": {
+      // Host-only skip: immediately move to next player
       if (!state.currentPlayer) return state;
-      const team = state.teams.find(t => t.teamId === action.teamId);
-      if (!team) return state;
-      if (state.skippedTeams.includes(action.teamId)) return state;
 
-      const teamLabel = team.isBot ? `🤖 ${team.shortName}` : `👤 ${team.shortName}`;
+      const unsoldPlayer: AuctionPlayer = { ...state.currentPlayer, status: "unsold" };
+      const updatedPlayerPool = state.playerPool.map(p =>
+        p.id === state.currentPlayer!.id ? unsoldPlayer : p
+      );
+      const unsoldForLater: AuctionPlayer = { ...state.currentPlayer, status: "upcoming" };
 
       return {
         ...state,
-        skippedTeams: [...state.skippedTeams, action.teamId],
-        auctionLog: addLog(state, `⏭️ ${teamLabel} skips ${state.currentPlayer.name}`, "skip"),
+        playerPool: updatedPlayerPool,
+        unsoldPlayers: state.isMiniBidRound
+          ? state.unsoldPlayers.filter(p => p.id !== state.currentPlayer!.id)
+          : [...state.unsoldPlayers, unsoldForLater],
+        auctionLog: addLog(state, `⏭️ Host skips ${state.currentPlayer.name}`, "skip"),
       };
     }
 

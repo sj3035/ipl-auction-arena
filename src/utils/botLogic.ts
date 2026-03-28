@@ -151,13 +151,14 @@ export function getBotBidders(
   teams: TeamSlot[],
   player: AuctionPlayer,
   currentBid: number,
-  currentBidder: string | null
+  currentBidder: string | null,
+  isMarquee: boolean = false
 ): Array<{ teamId: string; delay: number }> {
   const bidders: Array<{ teamId: string; delay: number }> = [];
   
   for (const team of teams) {
     if (!team.isBot) continue;
-    const decision = botShouldBid(team, player, currentBid, currentBidder);
+    const decision = botShouldBid(team, player, currentBid, currentBidder, isMarquee);
     if (decision.shouldBid) {
       bidders.push({ teamId: team.teamId, delay: decision.delay });
     }
