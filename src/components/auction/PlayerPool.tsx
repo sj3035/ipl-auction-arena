@@ -9,8 +9,11 @@ interface PlayerPoolProps {
   mobile?: boolean;
 }
 
+const MARQUEE_RATING = 10;
+
 const categories: Array<{ label: string; value: string }> = [
   { label: "All", value: "All" },
+  { label: "⭐", value: "Marquee" },
   { label: "Bat", value: "Batter" },
   { label: "WK", value: "WK" },
   { label: "AR", value: "All-rounder" },
