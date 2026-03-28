@@ -109,19 +109,15 @@ export default function AuctionRoom() {
               </div>
               {activeTeam && (
                 <div className="max-w-md mx-auto w-full space-y-2">
-                  {!hasSkipped && (
-                    <BidButton
-                      team={activeTeam}
-                      currentBid={state.currentBid}
-                      currentBidder={state.currentBidder}
-                      currentPlayer={state.currentPlayer}
-                      onBid={handleBid}
-                    />
-                  )}
+                  <BidButton
+                    team={activeTeam}
+                    currentBid={state.currentBid}
+                    currentBidder={state.currentBidder}
+                    currentPlayer={state.currentPlayer}
+                    onBid={handleBid}
+                  />
                   <SkipButton
-                    timer={state.timer}
-                    hasSkipped={hasSkipped}
-                    isLeadingBidder={isLeadingBidder}
+                    isHost={state.isHost}
                     onSkip={handleSkip}
                   />
                 </div>
