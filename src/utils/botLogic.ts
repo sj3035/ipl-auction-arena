@@ -33,11 +33,19 @@ function getRoleNeed(team: TeamSlot, role: PlayerRole): number {
 function getInterestProbability(
   bot: TeamSlot,
   player: AuctionPlayer,
-  strategy: BotStrategy
+  strategy: BotStrategy,
+  isMarquee: boolean = false
 ): number {
+  // Marquee players: very high interest from all strategies
+  if (isMarquee) {
+    const purseFactor = bot.purse / 12000;
+    if (purseFactor < 0.5) return 0.3; // Low purse, less interested
+    return strategy === "aggressive" ? 0.95 : strategy === "balanced" ? 0.85 : strategy === "specialist" ? 0.8 : 0.6;
+  }
+
   const roleNeed = getRoleNeed(bot, player.role);
   const ratingFactor = player.rating / 10;
-  const purseFactor = bot.purse / 12000; // How much purse remains
+  const purseFactor = bot.purse / 12000;
   const squadFactor = bot.squad.length < 10 ? 0.8 : bot.squad.length < 15 ? 0.5 : 0.3;
 
   let base: number;
