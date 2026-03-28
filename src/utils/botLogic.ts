@@ -137,7 +137,8 @@ export function botShouldBid(
 
   const interest = getInterestProbability(bot, player, strategy, isMarquee);
   const roleNeed = getRoleNeed(bot, player.role);
-  const maxCeiling = getMaxBidCeiling(player, strategy, roleNeed, isMarquee);
+  const marqueeOwned = getMarqueeCount(bot.squad);
+  const maxCeiling = getMaxBidCeiling(player, strategy, roleNeed, isMarquee, marqueeOwned);
   const nextBid = currentBid + getBidIncrement(currentBid);
 
   // Check if next bid exceeds ceiling
