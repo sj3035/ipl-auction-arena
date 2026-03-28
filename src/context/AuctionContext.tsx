@@ -56,23 +56,51 @@ function getNextPlayerFromPool(state: GameState): AuctionPlayer | null {
 }
 
 function advanceCategory(state: GameState): Partial<GameState> {
-  let nextIdx = state.currentCategoryIndex + 1;
-  
-  while (nextIdx < POOL_ORDER.length) {
-    const cat = POOL_ORDER[nextIdx];
-    const pool = state.isMiniBidRound ? state.unsoldPlayers : state.playerPool;
-    const available = pool.filter(p => p.status === "upcoming" && p.role === cat);
-    if (available.length > 0) break;
-    nextIdx++;
+  const pool = state.isMiniBidRound ? state.unsoldPlayers : state.playerPool;
+
+  // If marquee round, check if marquee players remain
+  if (state.isMarqueeRound) {
+    const marqueeLeft = pool.filter(p => p.status === "upcoming" && p.rating >= MARQUEE_RATING);
+    if (marqueeLeft.length > 0) return {}; // stay in marquee
+    // Marquee done, move to category rounds
+    return {
+      isMarqueeRound: false,
+      currentCategoryIndex: 0,
+      categoryBatchIndex: 0,
+      auctionLog: addLog(state, "🏏 Marquee round complete! Moving to category rounds.", "system"),
+    };
   }
 
-  if (nextIdx >= POOL_ORDER.length) {
+  // Category batch logic: serve BATCH_SIZE per category, then rotate
+  const category = POOL_ORDER[state.currentCategoryIndex];
+  const availableInCat = pool.filter(p => p.status === "upcoming" && p.role === category && p.rating < MARQUEE_RATING);
+  
+  // If current category still has players and we haven't exhausted the batch, stay
+  if (availableInCat.length > 0 && state.categoryBatchIndex < BATCH_SIZE) {
+    return {};
+  }
+
+  // Move to next category with available players
+  let nextIdx = (state.currentCategoryIndex + 1) % POOL_ORDER.length;
+  let checked = 0;
+  while (checked < POOL_ORDER.length) {
+    const cat = POOL_ORDER[nextIdx];
+    const available = pool.filter(p => p.status === "upcoming" && p.role === cat && p.rating < MARQUEE_RATING);
+    if (available.length > 0) break;
+    nextIdx = (nextIdx + 1) % POOL_ORDER.length;
+    checked++;
+  }
+
+  if (checked >= POOL_ORDER.length) {
+    // All categories exhausted
     if (!state.isMiniBidRound && state.unsoldPlayers.length > 0) {
       const teamsNeedPlayers = state.teams.some(t => t.squad.length < 18);
       if (teamsNeedPlayers) {
         return {
           currentCategoryIndex: 0,
+          categoryBatchIndex: 0,
           isMiniBidRound: true,
+          isMarqueeRound: false,
           auctionLog: addLog(state, "🔄 Mini-auction round begins! Unsold players return to the pool.", "system"),
         };
       }
@@ -80,7 +108,11 @@ function advanceCategory(state: GameState): Partial<GameState> {
     return { phase: "end" as GamePhase };
   }
 
-  return { currentCategoryIndex: nextIdx };
+  return {
+    currentCategoryIndex: nextIdx,
+    categoryBatchIndex: 0,
+    auctionLog: addLog(state, `📋 Now auctioning: ${POOL_ORDER[nextIdx]}s`, "system"),
+  };
 }
 
 function gameReducer(state: GameState, action: GameAction): GameState {
