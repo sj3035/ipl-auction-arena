@@ -9,8 +9,11 @@ interface PlayerPoolProps {
   mobile?: boolean;
 }
 
+const MARQUEE_RATING = 10;
+
 const categories: Array<{ label: string; value: string }> = [
   { label: "All", value: "All" },
+  { label: "⭐", value: "Marquee" },
   { label: "Bat", value: "Batter" },
   { label: "WK", value: "WK" },
   { label: "AR", value: "All-rounder" },
@@ -33,7 +36,7 @@ export function PlayerPool({ players, currentPlayerId, mobile }: PlayerPoolProps
         <h3 className="text-xs sm:text-sm font-semibold text-muted-foreground uppercase tracking-wider">Player Pool</h3>
       </div>
       <Tabs defaultValue="All" className="p-2">
-        <TabsList className="w-full grid grid-cols-6 h-8">
+        <TabsList className="w-full grid grid-cols-7 h-8">
           {categories.map(c => (
             <TabsTrigger key={c.value} value={c.value} className="text-[10px] sm:text-xs px-1">
               {c.label}
@@ -45,7 +48,11 @@ export function PlayerPool({ players, currentPlayerId, mobile }: PlayerPoolProps
             <ScrollArea className={scrollHeight}>
               <div className="space-y-1 pr-2">
                 {players
-                  .filter(p => c.value === "All" || p.role === c.value)
+                  .filter(p =>
+                    c.value === "All" ? true :
+                    c.value === "Marquee" ? p.rating >= MARQUEE_RATING :
+                    p.role === c.value
+                  )
                   .map(p => (
                     <div
                       key={p.id}

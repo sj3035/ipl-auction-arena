@@ -29,6 +29,11 @@ function getRoleNeed(team: TeamSlot, role: PlayerRole): number {
   return 0.3;
 }
 
+/** Count marquee players in a team's squad */
+function getMarqueeCount(squad: AuctionPlayer[]): number {
+  return squad.filter(p => p.rating >= 10).length;
+}
+
 /** Calculate interest probability based on strategy */
 function getInterestProbability(
   bot: TeamSlot,
@@ -36,11 +41,17 @@ function getInterestProbability(
   strategy: BotStrategy,
   isMarquee: boolean = false
 ): number {
-  // Marquee players: very high interest from all strategies
+  // Marquee players: ensure each bot gets 1-2 marquee players
   if (isMarquee) {
+    const marqueeOwned = getMarqueeCount(bot.squad);
     const purseFactor = bot.purse / 12000;
-    if (purseFactor < 0.5) return 0.3; // Low purse, less interested
-    return strategy === "aggressive" ? 0.95 : strategy === "balanced" ? 0.85 : strategy === "specialist" ? 0.8 : 0.6;
+    if (purseFactor < 0.3) return 0.05; // Can't afford
+    // Already has 2+ marquee: very low interest
+    if (marqueeOwned >= 2) return 0.05;
+    // Has 0 marquee: extremely high interest (must get at least 1)
+    if (marqueeOwned === 0) return 0.98;
+    // Has 1 marquee: moderate-high interest for a second
+    return strategy === "aggressive" ? 0.85 : strategy === "balanced" ? 0.7 : strategy === "specialist" ? 0.65 : 0.5;
   }
 
   const roleNeed = getRoleNeed(bot, player.role);
@@ -78,14 +89,16 @@ function getMaxBidCeiling(
   player: AuctionPlayer,
   strategy: BotStrategy,
   roleNeed: number,
-  isMarquee: boolean = false
+  isMarquee: boolean = false,
+  marqueeOwned: number = 0
 ): number {
-  // Marquee players (rating 10): aggressive bidding 10-20 Cr range (1000-2000 Lakhs)
   if (isMarquee) {
     const minCeiling = 1000; // 10 Cr
     const maxCeiling = 2000; // 20 Cr
     const aggressiveness = strategy === "aggressive" ? 0.8 : strategy === "balanced" ? 0.5 : strategy === "specialist" ? 0.6 : 0.3;
-    return Math.round(minCeiling + (maxCeiling - minCeiling) * (aggressiveness + Math.random() * 0.3));
+    // Bots with 0 marquee push ceiling higher
+    const urgency = marqueeOwned === 0 ? 1.2 : 1.0;
+    return Math.round(minCeiling + (maxCeiling - minCeiling) * Math.min(1.1, (aggressiveness + Math.random() * 0.3) * urgency));
   }
 
   let multiplier: number;
@@ -124,7 +137,8 @@ export function botShouldBid(
 
   const interest = getInterestProbability(bot, player, strategy, isMarquee);
   const roleNeed = getRoleNeed(bot, player.role);
-  const maxCeiling = getMaxBidCeiling(player, strategy, roleNeed, isMarquee);
+  const marqueeOwned = getMarqueeCount(bot.squad);
+  const maxCeiling = getMaxBidCeiling(player, strategy, roleNeed, isMarquee, marqueeOwned);
   const nextBid = currentBid + getBidIncrement(currentBid);
 
   // Check if next bid exceeds ceiling
