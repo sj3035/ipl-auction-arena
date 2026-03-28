@@ -154,13 +154,16 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
     case "START_AUCTION": {
       const pool = [...state.playerPool].sort(() => Math.random() - 0.5);
-      const firstPlayer = pool.find(p => p.status === "upcoming" && p.role === POOL_ORDER[0]) || pool.find(p => p.status === "upcoming");
+      // Start with marquee players (rating 10)
+      const marqueeFirst = pool.find(p => p.status === "upcoming" && p.rating >= MARQUEE_RATING);
+      const firstPlayer = marqueeFirst || pool.find(p => p.status === "upcoming");
       
       if (!firstPlayer) return state;
 
+      const isMarquee = !!marqueeFirst;
       const log = addLog(
         { ...state, auctionLog: [] },
-        `🏏 IPL Auction begins! First category: ${POOL_ORDER[0]}s`,
+        isMarquee ? `⭐ IPL Auction begins! MARQUEE ROUND - Elite players first!` : `🏏 IPL Auction begins! First category: ${POOL_ORDER[0]}s`,
         "system"
       );
       const log2: AuctionLogEntry = {
@@ -183,6 +186,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         auctionPaused: false,
         skippedTeams: [],
         playerStartTime: Date.now(),
+        isMarqueeRound: isMarquee,
+        marqueeBatchIndex: 0,
+        categoryBatchIndex: 0,
       };
     }
 
