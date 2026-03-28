@@ -141,7 +141,8 @@ export function botShouldBid(
     return { shouldBid: false, delay: 0 };
   }
 
-  const delay = 2000 + Math.random() * 3000; // 2-5 seconds
+  // Marquee: faster bidding
+  const delay = isMarquee ? (1000 + Math.random() * 2000) : (2000 + Math.random() * 3000);
   return { shouldBid: true, delay };
 }
 
