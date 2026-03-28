@@ -42,12 +42,11 @@ export default function AuctionRoom() {
     dispatch({ type: "SET_ACTIVE_HUMAN", index: newIdx });
   };
 
-  const categoryLabel = state.isMiniBidRound
-    ? "Mini-Auction Round"
-    : `Round: ${state.poolCategoryOrder[state.currentCategoryIndex] || "Complete"}`;
-
-  const hasSkipped = activeTeam ? state.skippedTeams.includes(activeTeam.teamId) : false;
-  const isLeadingBidder = activeTeam ? state.currentBidder === activeTeam.teamId : false;
+  const categoryLabel = state.isMarqueeRound
+    ? "⭐ Marquee Round"
+    : state.isMiniBidRound
+      ? "Mini-Auction Round"
+      : `Round: ${state.poolCategoryOrder[state.currentCategoryIndex] || "Complete"}`;
 
   const mobileTabs: { id: MobileTab; label: string; icon: React.ReactNode }[] = [
     { id: "auction", label: "Auction", icon: <Gavel className="w-4 h-4" /> },
