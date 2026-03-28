@@ -89,15 +89,16 @@ function getMaxBidCeiling(
   player: AuctionPlayer,
   strategy: BotStrategy,
   roleNeed: number,
-  isMarquee: boolean = false
+  isMarquee: boolean = false,
+  marqueeOwned: number = 0
 ): number {
-  // Marquee players (rating 10): aggressive bidding 10-20 Cr range
   if (isMarquee) {
-    const marqueeOwned = getMarqueeCount({ squad: [] } as any); // dummy - we need team context
     const minCeiling = 1000; // 10 Cr
     const maxCeiling = 2000; // 20 Cr
     const aggressiveness = strategy === "aggressive" ? 0.8 : strategy === "balanced" ? 0.5 : strategy === "specialist" ? 0.6 : 0.3;
-    return Math.round(minCeiling + (maxCeiling - minCeiling) * (aggressiveness + Math.random() * 0.3));
+    // Bots with 0 marquee push ceiling higher
+    const urgency = marqueeOwned === 0 ? 1.2 : 1.0;
+    return Math.round(minCeiling + (maxCeiling - minCeiling) * Math.min(1.1, (aggressiveness + Math.random() * 0.3) * urgency));
   }
 
   let multiplier: number;
