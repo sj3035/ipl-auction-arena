@@ -36,7 +36,7 @@ export function PlayerPool({ players, currentPlayerId, mobile }: PlayerPoolProps
         <h3 className="text-xs sm:text-sm font-semibold text-muted-foreground uppercase tracking-wider">Player Pool</h3>
       </div>
       <Tabs defaultValue="All" className="p-2">
-        <TabsList className="w-full grid grid-cols-6 h-8">
+        <TabsList className="w-full grid grid-cols-7 h-8">
           {categories.map(c => (
             <TabsTrigger key={c.value} value={c.value} className="text-[10px] sm:text-xs px-1">
               {c.label}
