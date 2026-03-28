@@ -114,17 +114,17 @@ export function botShouldBid(
   bot: TeamSlot,
   player: AuctionPlayer,
   currentBid: number,
-  currentBidder: string | null
+  currentBidder: string | null,
+  isMarquee: boolean = false
 ): BotDecision {
   const strategy = bot.botStrategy || "balanced";
   
-  // Check if can bid at all
   const { canBid } = canTeamBid(bot, currentBid, currentBidder, player);
   if (!canBid) return { shouldBid: false, delay: 0 };
 
-  const interest = getInterestProbability(bot, player, strategy);
+  const interest = getInterestProbability(bot, player, strategy, isMarquee);
   const roleNeed = getRoleNeed(bot, player.role);
-  const maxCeiling = getMaxBidCeiling(player, strategy, roleNeed);
+  const maxCeiling = getMaxBidCeiling(player, strategy, roleNeed, isMarquee);
   const nextBid = currentBid + getBidIncrement(currentBid);
 
   // Check if next bid exceeds ceiling
