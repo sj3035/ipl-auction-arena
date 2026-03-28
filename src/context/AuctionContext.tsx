@@ -572,29 +572,7 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase, state.auctionPaused, state.currentPlayer?.id, state.currentBid, state.currentBidder, state.isHost]);
 
-  // Bot skip logic (host only)
-  useEffect(() => {
-    if (!state.isHost) return;
-    if (state.phase !== "auction" || state.auctionPaused || !state.currentPlayer) return;
-
-    const elapsed = (Date.now() - state.playerStartTime) / 1000;
-    if (elapsed < SKIP_CUTOFF_SECONDS) {
-      const delay = (SKIP_CUTOFF_SECONDS - elapsed) * 1000 + Math.random() * 2000;
-      const timeout = setTimeout(() => {
-        const botsToSkip = state.teams.filter(t => 
-          t.isBot && 
-          !state.skippedTeams.includes(t.teamId) &&
-          t.teamId !== state.currentBidder
-        );
-        botsToSkip.forEach(bot => {
-          if (Math.random() < 0.4) {
-            dispatch({ type: "SKIP_PLAYER", teamId: bot.teamId });
-          }
-        });
-      }, delay);
-      return () => clearTimeout(timeout);
-    }
-  }, [state.phase, state.auctionPaused, state.currentPlayer?.id, state.playerStartTime, state.isHost]);
+  // Skip is now host-only via UI button, no bot skip logic needed
 
   return (
     <AuctionContext.Provider value={{ state, dispatch, getHumanTeams, getActiveHumanTeam, sendAction }}>
