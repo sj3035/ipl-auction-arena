@@ -91,8 +91,9 @@ function getMaxBidCeiling(
   roleNeed: number,
   isMarquee: boolean = false
 ): number {
-  // Marquee players (rating 10): aggressive bidding 10-20 Cr range (1000-2000 Lakhs)
+  // Marquee players (rating 10): aggressive bidding 10-20 Cr range
   if (isMarquee) {
+    const marqueeOwned = getMarqueeCount({ squad: [] } as any); // dummy - we need team context
     const minCeiling = 1000; // 10 Cr
     const maxCeiling = 2000; // 20 Cr
     const aggressiveness = strategy === "aggressive" ? 0.8 : strategy === "balanced" ? 0.5 : strategy === "specialist" ? 0.6 : 0.3;
