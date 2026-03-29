@@ -23,6 +23,7 @@ function createInitialTeams(): TeamSlot[] {
     botStrategy: BOT_STRATEGIES[Math.floor(Math.random() * BOT_STRATEGIES.length)],
     purse: INITIAL_PURSE,
     squad: [],
+    retainedPlayers: [],
   }));
 }
 
