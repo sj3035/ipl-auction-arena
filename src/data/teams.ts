@@ -1,6 +1,6 @@
 import { TeamSlot } from "@/types/auction";
 
-export const IPL_TEAMS: Omit<TeamSlot, "playerName" | "isBot" | "botStrategy" | "purse" | "squad">[] = [
+export const IPL_TEAMS: Omit<TeamSlot, "playerName" | "isBot" | "botStrategy" | "purse" | "squad" | "retainedPlayers">[] = [
   { teamId: "csk", teamName: "Chennai Super Kings", shortName: "CSK", color: "45 100% 51%" },
   { teamId: "mi", teamName: "Mumbai Indians", shortName: "MI", color: "214 100% 40%" },
   { teamId: "rcb", teamName: "Royal Challengers Bengaluru", shortName: "RCB", color: "0 80% 45%" },
