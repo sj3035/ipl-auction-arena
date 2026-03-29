@@ -29,6 +29,7 @@ export interface TeamSlot {
   botStrategy?: BotStrategy;
   purse: number; // in Lakhs (12000 = 120 Cr)
   squad: AuctionPlayer[];
+  retainedPlayers: AuctionPlayer[]; // RTM retained players
 }
 
 export interface BidEntry {
