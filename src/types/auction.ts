@@ -97,4 +97,6 @@ export type GameAction =
   | { type: "PAUSE_AUCTION" }
   | { type: "RESUME_AUCTION" }
   | { type: "SKIP_PLAYER"; teamId: string }
+  | { type: "RETAIN_PLAYER"; teamId: string; playerId: string }
+  | { type: "AUTO_RETAIN_BOTS" }
   | { type: "SYNC_STATE"; state: Partial<GameState> };
