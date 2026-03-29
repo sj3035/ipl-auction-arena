@@ -6,6 +6,7 @@ import { playerPool } from "@/data/players";
 import { IPL_TEAMS, INITIAL_PURSE, TIMER_DURATION } from "@/data/teams";
 import { getBidIncrement, generateRoomId, generateLogId, formatPrice } from "@/utils/bidUtils";
 import { getBotBidders } from "@/utils/botLogic";
+import { PREVIOUS_YEAR_ROSTERS, RETENTION_COSTS, MAX_RETENTIONS } from "@/data/retentions";
 import { supabase } from "@/integrations/supabase/client";
 import { getSessionId } from "@/hooks/useSessionId";
 
@@ -23,6 +24,7 @@ function createInitialTeams(): TeamSlot[] {
     botStrategy: BOT_STRATEGIES[Math.floor(Math.random() * BOT_STRATEGIES.length)],
     purse: INITIAL_PURSE,
     squad: [],
+    retainedPlayers: [],
   }));
 }
 
@@ -347,6 +349,85 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
     case "RESUME_AUCTION":
       return { ...state, auctionPaused: false };
+
+    case "RETAIN_PLAYER": {
+      const roster = PREVIOUS_YEAR_ROSTERS[action.teamId] || [];
+      if (!roster.includes(action.playerId)) return state;
+
+      const team = state.teams.find(t => t.teamId === action.teamId);
+      if (!team) return state;
+      if (team.retainedPlayers.length >= MAX_RETENTIONS) return state;
+
+      const player = state.playerPool.find(p => p.id === action.playerId);
+      if (!player) return state;
+
+      const cost = RETENTION_COSTS[team.retainedPlayers.length];
+      if (team.purse < cost) return state;
+
+      const retainedPlayer: AuctionPlayer = { ...player, status: "sold", soldTo: action.teamId, soldPrice: cost };
+      const teams = state.teams.map(t =>
+        t.teamId === action.teamId
+          ? { ...t, purse: t.purse - cost, squad: [...t.squad, retainedPlayer], retainedPlayers: [...t.retainedPlayers, retainedPlayer] }
+          : t
+      );
+      const updatedPool = state.playerPool.map(p => p.id === action.playerId ? { ...p, status: "sold" as const, soldTo: action.teamId, soldPrice: cost } : p);
+
+      return {
+        ...state,
+        teams,
+        playerPool: updatedPool,
+        auctionLog: addLog(state, `🔒 ${team.shortName} retains ${player.name} for ${formatPrice(cost)}!`, "system"),
+      };
+    }
+
+    case "AUTO_RETAIN_BOTS": {
+      let newState = { ...state };
+      for (const team of newState.teams) {
+        if (!team.isBot) continue;
+        const roster = PREVIOUS_YEAR_ROSTERS[team.teamId] || [];
+        // Get available players from roster sorted by rating desc
+        const available = roster
+          .map(pid => newState.playerPool.find(p => p.id === pid && p.status === "upcoming"))
+          .filter(Boolean)
+          .sort((a, b) => b!.rating - a!.rating);
+
+        // Randomly decide how many to retain (0-3), weighted toward 2-3
+        const rand = Math.random();
+        const maxRetain = Math.min(available.length, MAX_RETENTIONS);
+        let retainCount: number;
+        if (maxRetain === 0) {
+          retainCount = 0;
+        } else if (rand < 0.1) {
+          retainCount = 0;
+        } else if (rand < 0.2) {
+          retainCount = Math.min(1, maxRetain);
+        } else if (rand < 0.5) {
+          retainCount = Math.min(2, maxRetain);
+        } else {
+          retainCount = maxRetain;
+        }
+
+        for (let i = 0; i < retainCount; i++) {
+          const player = available[i]!;
+          const cost = RETENTION_COSTS[i];
+          const currentTeam = newState.teams.find(t => t.teamId === team.teamId)!;
+          if (currentTeam.purse < cost) break;
+
+          const retainedPlayer: AuctionPlayer = { ...player, status: "sold", soldTo: team.teamId, soldPrice: cost };
+          newState = {
+            ...newState,
+            teams: newState.teams.map(t =>
+              t.teamId === team.teamId
+                ? { ...t, purse: t.purse - cost, squad: [...t.squad, retainedPlayer], retainedPlayers: [...t.retainedPlayers, retainedPlayer] }
+                : t
+            ),
+            playerPool: newState.playerPool.map(p => p.id === player.id ? { ...p, status: "sold" as const, soldTo: team.teamId, soldPrice: cost } : p),
+            auctionLog: addLog(newState, `🔒 ${team.shortName} retains ${player.name} for ${formatPrice(cost)}!`, "system"),
+          };
+        }
+      }
+      return newState;
+    }
 
     case "RESET_GAME":
       return createInitialState();

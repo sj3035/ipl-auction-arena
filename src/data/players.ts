@@ -47,7 +47,7 @@ export const playerPool: Player[] = [
     "role": "Batter",
     "nationality": "Indian",
     "basePrice": 200,
-    "rating": 9
+    "rating": 10
   },
   {
     "id": "p7",
@@ -319,7 +319,7 @@ export const playerPool: Player[] = [
     "role": "Batter",
     "nationality": "Overseas",
     "basePrice": 200,
-    "rating": 9
+    "rating": 10
   },
   {
     "id": "p41",
@@ -343,7 +343,7 @@ export const playerPool: Player[] = [
     "role": "Batter",
     "nationality": "Overseas",
     "basePrice": 200,
-    "rating": 9
+    "rating": 10
   },
   {
     "id": "p44",
@@ -647,7 +647,7 @@ export const playerPool: Player[] = [
     "role": "WK",
     "nationality": "Indian",
     "basePrice": 200,
-    "rating": 9
+    "rating": 10
   },
   {
     "id": "p82",
@@ -807,7 +807,7 @@ export const playerPool: Player[] = [
     "role": "All-rounder",
     "nationality": "Indian",
     "basePrice": 200,
-    "rating": 9
+    "rating": 10
   },
   {
     "id": "p102",
@@ -815,7 +815,7 @@ export const playerPool: Player[] = [
     "role": "All-rounder",
     "nationality": "Indian",
     "basePrice": 200,
-    "rating": 9
+    "rating": 10
   },
   {
     "id": "p103",
@@ -943,7 +943,7 @@ export const playerPool: Player[] = [
     "role": "All-rounder",
     "nationality": "Overseas",
     "basePrice": 200,
-    "rating": 9
+    "rating": 10
   },
   {
     "id": "p119",
@@ -951,7 +951,7 @@ export const playerPool: Player[] = [
     "role": "All-rounder",
     "nationality": "Overseas",
     "basePrice": 200,
-    "rating": 9
+    "rating": 10
   },
   {
     "id": "p120",
