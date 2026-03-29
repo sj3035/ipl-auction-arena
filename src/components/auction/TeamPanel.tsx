@@ -1,6 +1,6 @@
 import { TeamSlot } from "@/types/auction";
 import { formatPrice } from "@/utils/bidUtils";
-import { Users, Globe } from "lucide-react";
+import { Users, Globe, Lock } from "lucide-react";
 
 interface TeamPanelProps {
   teams: TeamSlot[];
