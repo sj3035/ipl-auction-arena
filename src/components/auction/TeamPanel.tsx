@@ -45,6 +45,9 @@ export function TeamPanel({ teams, currentBidder, onViewSquad }: TeamPanelProps)
             <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground">
               <span className="flex items-center gap-1"><Users className="w-3 h-3" />{team.squad.length}/25</span>
               <span className="flex items-center gap-1"><Globe className="w-3 h-3" />{overseasCount}/8</span>
+              {team.retainedPlayers.length > 0 && (
+                <span className="flex items-center gap-1 text-yellow-400"><Lock className="w-3 h-3" />{team.retainedPlayers.length} RTM</span>
+              )}
             </div>
           </button>
         );
