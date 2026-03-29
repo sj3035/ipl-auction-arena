@@ -807,7 +807,7 @@ export const playerPool: Player[] = [
     "role": "All-rounder",
     "nationality": "Indian",
     "basePrice": 200,
-    "rating": 9
+    "rating": 10
   },
   {
     "id": "p102",
