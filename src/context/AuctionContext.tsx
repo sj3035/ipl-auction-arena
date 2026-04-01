@@ -9,11 +9,16 @@ import { getBotBidders } from "@/utils/botLogic";
 import { PREVIOUS_YEAR_ROSTERS, RETENTION_COSTS, MAX_RETENTIONS } from "@/data/retentions";
 import { supabase } from "@/integrations/supabase/client";
 import { getSessionId } from "@/hooks/useSessionId";
+import {
+  playBidSound, playSoldSound, playUnsoldSound, playMarqueeSound,
+  playTimerWarning, playNewPlayerSound
+} from "@/utils/auctionSounds";
 
 const BOT_STRATEGIES: BotStrategy[] = ["aggressive", "balanced", "budget", "specialist"];
 const POOL_ORDER: PlayerRole[] = ["Batter", "WK", "All-rounder", "Spinner", "Fast Bowler"];
-export const AUTO_SKIP_SECONDS = 8;
-const BATCH_SIZE = 10;
+const AUTO_SKIP_NO_BID = 10; // seconds with no bids → auto-skip
+const AUTO_SELL_AFTER_BID = 6; // seconds after last bid → auto-sell
+const BATCH_SIZE = 6;
 const MARQUEE_RATING = 10;
 
 function createInitialTeams(): TeamSlot[] {
@@ -41,7 +46,6 @@ function getNextPlayerFromPool(state: GameState): AuctionPlayer | null {
   const pool = state.isMiniBidRound ? state.unsoldPlayers : state.playerPool;
 
   if (state.isMarqueeRound) {
-    // Marquee: all 10-star players regardless of role
     const marquee = pool.filter(p => p.status === "upcoming" && p.rating >= MARQUEE_RATING);
     if (marquee.length === 0) return null;
     return marquee[Math.floor(Math.random() * marquee.length)];
@@ -50,7 +54,6 @@ function getNextPlayerFromPool(state: GameState): AuctionPlayer | null {
   const category = POOL_ORDER[state.currentCategoryIndex];
   if (!category) return null;
 
-  // Non-marquee players only (rating < 10)
   const available = pool.filter(p => p.status === "upcoming" && p.role === category && p.rating < MARQUEE_RATING);
   if (available.length === 0) return null;
 
@@ -60,11 +63,9 @@ function getNextPlayerFromPool(state: GameState): AuctionPlayer | null {
 function advanceCategory(state: GameState): Partial<GameState> {
   const pool = state.isMiniBidRound ? state.unsoldPlayers : state.playerPool;
 
-  // If marquee round, check if marquee players remain
   if (state.isMarqueeRound) {
     const marqueeLeft = pool.filter(p => p.status === "upcoming" && p.rating >= MARQUEE_RATING);
-    if (marqueeLeft.length > 0) return {}; // stay in marquee
-    // Marquee done, move to category rounds
+    if (marqueeLeft.length > 0) return {};
     return {
       isMarqueeRound: false,
       currentCategoryIndex: 0,
@@ -76,7 +77,7 @@ function advanceCategory(state: GameState): Partial<GameState> {
   // Category batch logic: serve BATCH_SIZE per category, then rotate
   const category = POOL_ORDER[state.currentCategoryIndex];
   const availableInCat = pool.filter(p => p.status === "upcoming" && p.role === category && p.rating < MARQUEE_RATING);
-  
+
   // If current category still has players and we haven't exhausted the batch, stay
   if (availableInCat.length > 0 && state.categoryBatchIndex < BATCH_SIZE) {
     return {};
@@ -94,7 +95,6 @@ function advanceCategory(state: GameState): Partial<GameState> {
   }
 
   if (checked >= POOL_ORDER.length) {
-    // All categories exhausted
     if (!state.isMiniBidRound && state.unsoldPlayers.length > 0) {
       const teamsNeedPlayers = state.teams.some(t => t.squad.length < 18);
       if (teamsNeedPlayers) {
@@ -113,7 +113,7 @@ function advanceCategory(state: GameState): Partial<GameState> {
   return {
     currentCategoryIndex: nextIdx,
     categoryBatchIndex: 0,
-    auctionLog: addLog(state, `📋 Now auctioning: ${POOL_ORDER[nextIdx]}s`, "system"),
+    auctionLog: addLog(state, `📋 Now auctioning: ${POOL_ORDER[nextIdx]}s (batch of ${BATCH_SIZE})`, "system"),
   };
 }
 
@@ -131,10 +131,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "SET_IS_HOST":
       return { ...state, isHost: action.isHost };
 
-    case "SYNC_STATE": {
-      // Merge received state from host broadcast (joiners only)
+    case "SYNC_STATE":
       return { ...state, ...action.state };
-    }
 
     case "JOIN_TEAM": {
       const teams = state.teams.map(t =>
@@ -156,10 +154,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
     case "START_AUCTION": {
       const pool = [...state.playerPool].sort(() => Math.random() - 0.5);
-      // Start with marquee players (rating 10)
       const marqueeFirst = pool.find(p => p.status === "upcoming" && p.rating >= MARQUEE_RATING);
       const firstPlayer = marqueeFirst || pool.find(p => p.status === "upcoming");
-      
+
       if (!firstPlayer) return state;
 
       const isMarquee = !!marqueeFirst;
@@ -244,7 +241,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const newBid = state.currentBid + increment;
 
       const teamLabel = team.isBot ? `🤖 ${team.shortName}` : `👤 ${team.shortName}`;
-      
+
       return {
         ...state,
         currentBid: newBid,
@@ -253,13 +250,12 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         bids: [...state.bids, { teamId: action.teamId, amount: newBid, timestamp: Date.now() }],
         auctionLog: addLog(state, `${teamLabel} bids ${formatPrice(newBid)} for ${state.currentPlayer.name}!`, "bid"),
         skippedTeams: state.skippedTeams.filter(id => id !== action.teamId),
+        playerStartTime: Date.now(), // reset for auto-sell tracking
       };
     }
 
     case "SKIP_PLAYER": {
-      // Host-only skip: immediately move to next player
       if (!state.currentPlayer) return state;
-
       const unsoldPlayer: AuctionPlayer = { ...state.currentPlayer, status: "unsold" };
       const updatedPlayerPool = state.playerPool.map(p =>
         p.id === state.currentPlayer!.id ? unsoldPlayer : p
@@ -272,7 +268,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         unsoldPlayers: state.isMiniBidRound
           ? state.unsoldPlayers.filter(p => p.id !== state.currentPlayer!.id)
           : [...state.unsoldPlayers, unsoldForLater],
-        auctionLog: addLog(state, `⏭️ Host skips ${state.currentPlayer.name}`, "skip"),
+        auctionLog: addLog(state, `⏭️ ${state.currentPlayer.name} skipped — no interest`, "skip"),
       };
     }
 
@@ -385,13 +381,11 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       for (const team of newState.teams) {
         if (!team.isBot) continue;
         const roster = PREVIOUS_YEAR_ROSTERS[team.teamId] || [];
-        // Get available players from roster sorted by rating desc
         const available = roster
           .map(pid => newState.playerPool.find(p => p.id === pid && p.status === "upcoming"))
           .filter(Boolean)
           .sort((a, b) => b!.rating - a!.rating);
 
-        // Randomly decide how many to retain (0-3), weighted toward 2-3
         const rand = Math.random();
         const maxRetain = Math.min(available.length, MAX_RETENTIONS);
         let retainCount: number;
@@ -485,6 +479,11 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
   const stateRef = useRef(state);
   stateRef.current = state;
 
+  // Track previous values for sound effects
+  const prevPlayerRef = useRef<string | null>(null);
+  const prevBidRef = useRef<number>(0);
+  const prevTimerRef = useRef<number>(TIMER_DURATION);
+
   const getHumanTeams = useCallback(() => {
     return state.teams.filter(t => !t.isBot);
   }, [state.teams]);
@@ -493,6 +492,41 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
     const humans = state.teams.filter(t => !t.isBot);
     return humans[state.activeHumanTeamIndex] || null;
   }, [state.teams, state.activeHumanTeamIndex]);
+
+  // Sound effects
+  useEffect(() => {
+    if (state.phase !== "auction") return;
+
+    // New player appeared
+    if (state.currentPlayer && state.currentPlayer.id !== prevPlayerRef.current) {
+      if (state.currentPlayer.rating >= MARQUEE_RATING) {
+        playMarqueeSound();
+      } else {
+        playNewPlayerSound();
+      }
+      prevPlayerRef.current = state.currentPlayer.id;
+    }
+
+    // Bid placed
+    if (state.currentBid > prevBidRef.current && state.currentBidder) {
+      playBidSound();
+    }
+    prevBidRef.current = state.currentBid;
+
+    // Timer warning
+    if (state.timer <= 5 && state.timer > 0 && state.timer < prevTimerRef.current) {
+      playTimerWarning();
+    }
+    prevTimerRef.current = state.timer;
+  }, [state.phase, state.currentPlayer?.id, state.currentBid, state.timer, state.currentBidder]);
+
+  // Sold/unsold sounds
+  useEffect(() => {
+    if (state.auctionLog.length === 0) return;
+    const latest = state.auctionLog[0];
+    if (latest.type === "sold") playSoldSound();
+    if (latest.type === "unsold") playUnsoldSound();
+  }, [state.auctionLog.length]);
 
   // Setup broadcast channel when roomDbId is set
   useEffect(() => {
@@ -504,16 +538,13 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
 
     channel
       .on("broadcast", { event: "game_state" }, ({ payload }) => {
-        // Joiners receive state from host
         if (!stateRef.current.isHost && payload) {
           dispatch({ type: "SYNC_STATE", state: payload });
         }
       })
       .on("broadcast", { event: "game_action" }, ({ payload }) => {
-        // Host receives actions from joiners
         if (stateRef.current.isHost && payload?.action) {
           const action = payload.action as GameAction;
-          // Only allow safe actions from joiners
           if (action.type === "PLACE_BID" || action.type === "SKIP_PLAYER") {
             dispatch(action);
           }
@@ -534,7 +565,6 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
     if (!state.isHost || !channelRef.current) return;
     if (state.phase !== "auction" && state.phase !== "end") return;
 
-    // Broadcast relevant state (exclude large pools for performance)
     const broadcastState: Partial<GameState> = {
       phase: state.phase,
       teams: state.teams,
@@ -597,37 +627,33 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
     };
   }, [state.phase, state.auctionPaused, state.currentPlayer, state.isHost]);
 
-  // Timer expiry → sell or unsold (host only)
-  useEffect(() => {
-    if (!state.isHost) return;
-    if (state.phase !== "auction" || state.timer > 0 || !state.currentPlayer) return;
-
-    const timeout = setTimeout(() => {
-      if (state.currentBidder) {
-        dispatch({ type: "SELL_PLAYER" });
-      } else {
-        dispatch({ type: "MARK_UNSOLD" });
-      }
-      setTimeout(() => {
-        dispatch({ type: "NEXT_PLAYER" });
-      }, 1500);
-    }, 500);
-
-    return () => clearTimeout(timeout);
-  }, [state.timer, state.phase, state.currentPlayer, state.currentBidder, state.isHost]);
-
-  // Auto-skip: if 8 seconds pass with no bids, auto-skip the player (host only)
+  // Auto-skip: 10s with no bids → skip (host only)
   useEffect(() => {
     if (!state.isHost) return;
     if (state.phase !== "auction" || state.auctionPaused || !state.currentPlayer) return;
-    if (state.currentBidder !== null) return; // someone has bid, don't auto-skip
+    if (state.currentBidder !== null) return; // someone has bid
 
     const elapsed = TIMER_DURATION - state.timer;
-    if (elapsed >= AUTO_SKIP_SECONDS) {
+    if (elapsed >= AUTO_SKIP_NO_BID) {
       dispatch({ type: "MARK_UNSOLD" });
       setTimeout(() => {
         dispatch({ type: "NEXT_PLAYER" });
       }, 1000);
+    }
+  }, [state.timer, state.phase, state.currentPlayer, state.currentBidder, state.auctionPaused, state.isHost]);
+
+  // Auto-sell: 6s after last bid with no new bid → sell (host only)
+  useEffect(() => {
+    if (!state.isHost) return;
+    if (state.phase !== "auction" || state.auctionPaused || !state.currentPlayer) return;
+    if (state.currentBidder === null) return; // no bid yet
+
+    const elapsed = TIMER_DURATION - state.timer;
+    if (elapsed >= AUTO_SELL_AFTER_BID) {
+      dispatch({ type: "SELL_PLAYER" });
+      setTimeout(() => {
+        dispatch({ type: "NEXT_PLAYER" });
+      }, 1500);
     }
   }, [state.timer, state.phase, state.currentPlayer, state.currentBidder, state.auctionPaused, state.isHost]);
 
@@ -642,7 +668,7 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
     const isMarquee = state.isMarqueeRound;
     const botBidders = getBotBidders(state.teams, state.currentPlayer, state.currentBid, state.currentBidder, isMarquee)
       .filter(b => !state.skippedTeams.includes(b.teamId));
-    
+
     if (botBidders.length > 0) {
       const fastest = botBidders[0];
       botTimerRef.current = setTimeout(() => {
@@ -655,8 +681,6 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase, state.auctionPaused, state.currentPlayer?.id, state.currentBid, state.currentBidder, state.isHost]);
-
-  // Skip is now host-only via UI button, no bot skip logic needed
 
   return (
     <AuctionContext.Provider value={{ state, dispatch, getHumanTeams, getActiveHumanTeam, sendAction }}>

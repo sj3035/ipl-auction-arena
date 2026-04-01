@@ -6,10 +6,10 @@ import { AuctionFeed } from "@/components/auction/AuctionFeed";
 import { PlayerPool } from "@/components/auction/PlayerPool";
 import { CountdownTimer } from "@/components/auction/CountdownTimer";
 import { BidButton } from "@/components/auction/BidButton";
-import { SkipButton } from "@/components/auction/SkipButton";
 import { SquadViewer } from "@/components/auction/SquadViewer";
 import { canTeamBid } from "@/utils/bidUtils";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChevronLeft, ChevronRight, Gavel, Users, ListOrdered, MessageSquare } from "lucide-react";
 
 type MobileTab = "auction" | "players" | "teams" | "feed";
@@ -30,12 +30,6 @@ export default function AuctionRoom() {
     if (!canBid) return;
     sendAction({ type: "PLACE_BID", teamId: activeTeam.teamId });
   }, [activeTeam, state.currentPlayer, state.currentBid, state.currentBidder, sendAction]);
-
-  const handleSkip = useCallback(() => {
-    if (!state.isHost) return;
-    sendAction({ type: "SKIP_PLAYER", teamId: "" });
-    setTimeout(() => sendAction({ type: "NEXT_PLAYER" }), 500);
-  }, [state.isHost, sendAction]);
 
   const switchHuman = (dir: number) => {
     const newIdx = (state.activeHumanTeamIndex + dir + humanTeams.length) % humanTeams.length;
@@ -93,44 +87,45 @@ export default function AuctionRoom() {
           <PlayerPool players={state.playerPool} currentPlayerId={state.currentPlayer?.id} />
         </div>
 
-        {/* Center - Auction Area */}
-        <div className="flex-1 flex flex-col p-4 gap-3 overflow-hidden">
-          {state.currentPlayer ? (
-            <>
-              <div className="max-w-md mx-auto w-full">
-                <PlayerCard
-                  player={state.currentPlayer}
-                  currentBid={state.currentBid}
-                  currentBidderName={currentBidderTeam?.shortName}
-                />
-              </div>
-              <div className="max-w-md mx-auto w-full">
-                <CountdownTimer timer={state.timer} />
-              </div>
-              {activeTeam && (
-                <div className="max-w-md mx-auto w-full space-y-2">
-                  <BidButton
-                    team={activeTeam}
-                    currentBid={state.currentBid}
-                    currentBidder={state.currentBidder}
-                    currentPlayer={state.currentPlayer}
-                    onBid={handleBid}
-                  />
-                  <SkipButton
-                    isHost={state.isHost}
-                    onSkip={handleSkip}
-                  />
+        {/* Center - Scrollable Auction Area */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <ScrollArea className="flex-1">
+            <div className="p-4 space-y-3">
+              {state.currentPlayer ? (
+                <>
+                  <div className="max-w-md mx-auto w-full">
+                    <PlayerCard
+                      player={state.currentPlayer}
+                      currentBid={state.currentBid}
+                      currentBidderName={currentBidderTeam?.shortName}
+                    />
+                  </div>
+                  <div className="max-w-md mx-auto w-full">
+                    <CountdownTimer timer={state.timer} />
+                  </div>
+                  {activeTeam && (
+                    <div className="max-w-md mx-auto w-full">
+                      <BidButton
+                        team={activeTeam}
+                        currentBid={state.currentBid}
+                        currentBidder={state.currentBidder}
+                        currentPlayer={state.currentPlayer}
+                        onBid={handleBid}
+                      />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex items-center justify-center h-40 text-muted-foreground">
+                  Preparing next player...
                 </div>
               )}
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-muted-foreground">
-              Preparing next player...
+              {/* Live Feed below bidding area */}
+              <div className="max-w-lg mx-auto w-full">
+                <AuctionFeed log={state.auctionLog} />
+              </div>
             </div>
-          )}
-          <div className="mt-auto">
-            <AuctionFeed log={state.auctionLog} />
-          </div>
+          </ScrollArea>
         </div>
 
         {/* Right Panel - Teams */}
@@ -154,19 +149,13 @@ export default function AuctionRoom() {
                   />
                   <CountdownTimer timer={state.timer} />
                   {activeTeam && (
-                    <div className="space-y-2">
-                      <BidButton
-                        team={activeTeam}
-                        currentBid={state.currentBid}
-                        currentBidder={state.currentBidder}
-                        currentPlayer={state.currentPlayer}
-                        onBid={handleBid}
-                      />
-                      <SkipButton
-                        isHost={state.isHost}
-                        onSkip={handleSkip}
-                      />
-                    </div>
+                    <BidButton
+                      team={activeTeam}
+                      currentBid={state.currentBid}
+                      currentBidder={state.currentBidder}
+                      currentPlayer={state.currentPlayer}
+                      onBid={handleBid}
+                    />
                   )}
                   <AuctionFeed log={state.auctionLog} compact />
                 </>

@@ -2,17 +2,19 @@ import { useEffect, useState, useCallback } from "react";
 import { useAuction } from "@/context/AuctionContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Copy, Play, UserMinus, Gavel, Wifi, Lock, Star } from "lucide-react";
+import { Copy, Play, UserMinus, Gavel, Wifi, Lock, Star, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { getRoomMembers, leaveRoomDb, subscribeToRoomMembers } from "@/hooks/useRoom";
 import { PREVIOUS_YEAR_ROSTERS, RETENTION_COSTS, MAX_RETENTIONS } from "@/data/retentions";
 import { formatPrice } from "@/utils/bidUtils";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { playerPool } from "@/data/players";
 
 export default function LobbyScreen() {
   const { state, dispatch } = useAuction();
   const [syncing, setSyncing] = useState(false);
   const humanTeams = state.teams.filter(t => !t.isBot);
+  const [retentionTeamIdx, setRetentionTeamIdx] = useState(0);
 
   const syncMembers = useCallback(async () => {
     if (!state.roomDbId) return;
@@ -45,9 +47,7 @@ export default function LobbyScreen() {
   };
 
   const startAuction = () => {
-    // Auto-retain for bots first
     dispatch({ type: "AUTO_RETAIN_BOTS" });
-    // Small delay then start auction
     setTimeout(() => {
       dispatch({ type: "START_AUCTION" });
     }, 500);
@@ -62,12 +62,18 @@ export default function LobbyScreen() {
     dispatch({ type: "LEAVE_TEAM", teamId });
   };
 
-  // Get retention-eligible players for a human team
-  const getRetentionOptions = (teamId: string) => {
+  // Current human team for retention
+  const currentRetentionTeam = humanTeams[retentionTeamIdx] || null;
+
+  // Get FULL previous year roster for the team (all players, not just available)
+  const getFullRoster = (teamId: string) => {
     const roster = PREVIOUS_YEAR_ROSTERS[teamId] || [];
-    return roster
-      .map(pid => state.playerPool.find(p => p.id === pid && p.status === "upcoming"))
-      .filter(Boolean);
+    return roster.map(pid => {
+      // Find in the full player pool (master data), not just state
+      const poolPlayer = state.playerPool.find(p => p.id === pid);
+      const masterPlayer = playerPool.find(p => p.id === pid);
+      return { player: masterPlayer || null, poolPlayer, pid };
+    }).filter(r => r.player !== null);
   };
 
   const handleRetain = (teamId: string, playerId: string) => {
@@ -78,9 +84,9 @@ export default function LobbyScreen() {
     }
   };
 
-  // Current human team being viewed for retention
-  const myTeam = state.teams.find(t => !t.isBot);
-  const myRetentionOptions = myTeam ? getRetentionOptions(myTeam.teamId) : [];
+  const switchRetentionTeam = (dir: number) => {
+    setRetentionTeamIdx((retentionTeamIdx + dir + humanTeams.length) % humanTeams.length);
+  };
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -167,58 +173,105 @@ export default function LobbyScreen() {
           </CardContent>
         </Card>
 
-        {/* RTM Retention Section for human teams */}
-        {myTeam && !myTeam.isBot && (
+        {/* RTM Retention Section — only for the selected human team */}
+        {humanTeams.length > 0 && currentRetentionTeam && (
           <Card className="bg-card border-yellow-400/30">
             <CardHeader>
-              <CardTitle className="text-sm uppercase tracking-wider text-yellow-400 flex items-center gap-2">
-                <Lock className="w-4 h-4" />
-                RTM — Retain Players ({myTeam.retainedPlayers.length}/{MAX_RETENTIONS})
-              </CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">
-                Retain up to 3 players from last year. Cost: 18 Cr → 15 Cr → 13 Cr
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {myRetentionOptions.length === 0 && myTeam.retainedPlayers.length === 0 && (
-                <p className="text-xs text-muted-foreground">No players available for retention.</p>
-              )}
-              {myTeam.retainedPlayers.map((p, i) => (
-                <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-yellow-400/10 border border-yellow-400/20">
-                  <div className="flex items-center gap-2">
-                    <Lock className="w-3.5 h-3.5 text-yellow-400" />
-                    <span className="text-sm font-medium text-foreground">{p.name}</span>
-                    <span className="text-[10px] text-muted-foreground">{p.role}</span>
-                  </div>
-                  <span className="text-xs font-bold text-yellow-400">{formatPrice(RETENTION_COSTS[i])}</span>
-                </div>
-              ))}
-              {myTeam.retainedPlayers.length < MAX_RETENTIONS && myRetentionOptions.map(p => {
-                if (!p) return null;
-                const cost = RETENTION_COSTS[myTeam.retainedPlayers.length];
-                return (
-                  <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/30 border border-border hover:border-yellow-400/30 transition">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-foreground">{p.name}</span>
-                      <span className="text-[10px] text-muted-foreground">{p.role}</span>
-                      <div className="flex items-center gap-0.5">
-                        {Array.from({ length: p.rating }).map((_, i) => (
-                          <Star key={i} className="w-2.5 h-2.5 text-yellow-400 fill-yellow-400" />
-                        ))}
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs border-yellow-400/30 text-yellow-400 hover:bg-yellow-400/10"
-                      onClick={() => handleRetain(myTeam.teamId, p.id)}
-                    >
-                      <Lock className="w-3 h-3 mr-1" />
-                      Retain ({formatPrice(cost)})
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm uppercase tracking-wider text-yellow-400 flex items-center gap-2">
+                  <Lock className="w-4 h-4" />
+                  RTM — {currentRetentionTeam.shortName} ({currentRetentionTeam.retainedPlayers.length}/{MAX_RETENTIONS})
+                </CardTitle>
+                {humanTeams.length > 1 && (
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" onClick={() => switchRetentionTeam(-1)} className="h-6 w-6">
+                      <ChevronLeft className="w-3 h-3" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => switchRetentionTeam(1)} className="h-6 w-6">
+                      <ChevronRight className="w-3 h-3" />
                     </Button>
                   </div>
-                );
-              })}
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Retain up to 3 players from {currentRetentionTeam.teamName}'s previous year roster. Cost: 18 Cr → 15 Cr → 13 Cr
+              </p>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="max-h-[280px]">
+                <div className="space-y-2 pr-2">
+                  {/* Already retained */}
+                  {currentRetentionTeam.retainedPlayers.map((p, i) => (
+                    <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-yellow-400/10 border border-yellow-400/20">
+                      <div className="flex items-center gap-2">
+                        <Lock className="w-3.5 h-3.5 text-yellow-400" />
+                        <span className="text-sm font-medium text-foreground">{p.name}</span>
+                        <span className="text-[10px] text-muted-foreground">{p.role}</span>
+                        <span className="text-[10px] text-muted-foreground">{p.nationality}</span>
+                      </div>
+                      <span className="text-xs font-bold text-yellow-400">{formatPrice(RETENTION_COSTS[i])}</span>
+                    </div>
+                  ))}
+
+                  {/* Full previous year roster */}
+                  <div className="border-t border-border pt-2 mt-2">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">
+                      Previous Year Roster
+                    </p>
+                    {getFullRoster(currentRetentionTeam.teamId).map(({ player, poolPlayer, pid }) => {
+                      if (!player) return null;
+                      const isRetained = currentRetentionTeam.retainedPlayers.some(rp => rp.id === pid);
+                      const isAvailable = poolPlayer && poolPlayer.status === "upcoming";
+                      const canRetain = isAvailable && !isRetained && currentRetentionTeam.retainedPlayers.length < MAX_RETENTIONS;
+                      const nextCost = RETENTION_COSTS[currentRetentionTeam.retainedPlayers.length];
+
+                      return (
+                        <div
+                          key={pid}
+                          className={`flex items-center justify-between p-2 rounded-lg border transition ${
+                            isRetained
+                              ? "bg-yellow-400/10 border-yellow-400/20 opacity-60"
+                              : isAvailable
+                                ? "bg-muted/30 border-border hover:border-yellow-400/30"
+                                : "bg-muted/10 border-border/50 opacity-40"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            {isRetained && <Lock className="w-3 h-3 text-yellow-400" />}
+                            <span className="text-sm font-medium text-foreground">{player.name}</span>
+                            <span className="text-[10px] text-muted-foreground">{player.role}</span>
+                            <span className="text-[10px] text-muted-foreground">{player.nationality}</span>
+                            <div className="flex items-center gap-0.5">
+                              {Array.from({ length: Math.min(player.rating, 5) }).map((_, i) => (
+                                <Star key={i} className="w-2 h-2 text-yellow-400 fill-yellow-400" />
+                              ))}
+                            </div>
+                          </div>
+                          <div className="shrink-0">
+                            {isRetained ? (
+                              <span className="text-[10px] text-yellow-400 font-semibold">RETAINED</span>
+                            ) : canRetain ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs border-yellow-400/30 text-yellow-400 hover:bg-yellow-400/10"
+                                onClick={() => handleRetain(currentRetentionTeam.teamId, pid)}
+                              >
+                                <Lock className="w-3 h-3 mr-1" />
+                                Retain ({formatPrice(nextCost)})
+                              </Button>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground">
+                                {!isAvailable ? "Unavailable" : "Max reached"}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </ScrollArea>
             </CardContent>
           </Card>
         )}
