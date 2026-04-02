@@ -6,7 +6,10 @@ import { playerPool } from "@/data/players";
 import { IPL_TEAMS, INITIAL_PURSE, TIMER_DURATION } from "@/data/teams";
 import { getBidIncrement, generateRoomId, generateLogId, formatPrice } from "@/utils/bidUtils";
 import { getBotBidders } from "@/utils/botLogic";
-import { PREVIOUS_YEAR_ROSTERS, RETENTION_COSTS, MAX_RETENTIONS } from "@/data/retentions";
+import {
+  PREVIOUS_YEAR_ROSTERS, MAX_RETENTIONS, MAX_CAPPED_RETENTIONS, MAX_UNCAPPED_RETENTIONS,
+  PLAYER_CAPPED_STATUS, getRetentionCost
+} from "@/data/retentions";
 import { supabase } from "@/integrations/supabase/client";
 import { getSessionId } from "@/hooks/useSessionId";
 import {
