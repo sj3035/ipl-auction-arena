@@ -400,19 +400,30 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           retainCount = 0;
         } else if (rand < 0.1) {
           retainCount = 0;
-        } else if (rand < 0.2) {
+        } else if (rand < 0.15) {
           retainCount = Math.min(1, maxRetain);
-        } else if (rand < 0.5) {
+        } else if (rand < 0.3) {
           retainCount = Math.min(2, maxRetain);
+        } else if (rand < 0.5) {
+          retainCount = Math.min(3, maxRetain);
+        } else if (rand < 0.7) {
+          retainCount = Math.min(4, maxRetain);
         } else {
-          retainCount = maxRetain;
+          retainCount = Math.min(5, maxRetain);
         }
 
+        let cappedCount = 0;
+        let uncappedCount = 0;
         for (let i = 0; i < retainCount; i++) {
           const player = available[i]!;
-          const cost = RETENTION_COSTS[i];
+          const isCapped = PLAYER_CAPPED_STATUS[player.id] !== false;
+          const cost = getRetentionCost(cappedCount, uncappedCount, isCapped);
+          if (cost === null) continue;
           const currentTeam = newState.teams.find(t => t.teamId === team.teamId)!;
           if (currentTeam.purse < cost) break;
+
+          if (isCapped) cappedCount++;
+          else uncappedCount++;
 
           const retainedPlayer: AuctionPlayer = { ...player, status: "sold", soldTo: team.teamId, soldPrice: cost };
           newState = {
@@ -423,7 +434,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
                 : t
             ),
             playerPool: newState.playerPool.map(p => p.id === player.id ? { ...p, status: "sold" as const, soldTo: team.teamId, soldPrice: cost } : p),
-            auctionLog: addLog(newState, `🔒 ${team.shortName} retains ${player.name} for ${formatPrice(cost)}!`, "system"),
+            auctionLog: addLog(newState, `🔒 ${team.shortName} retains ${player.name} for ${formatPrice(cost)}${!isCapped ? " (Uncapped)" : ""}!`, "system"),
           };
         }
       }
