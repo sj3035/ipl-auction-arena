@@ -360,8 +360,12 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const player = state.playerPool.find(p => p.id === action.playerId);
       if (!player) return state;
 
-      const cost = RETENTION_COSTS[team.retainedPlayers.length];
-      if (team.purse < cost) return state;
+      const isCapped = PLAYER_CAPPED_STATUS[action.playerId] !== false;
+      const cappedCount = team.retainedPlayers.filter(rp => PLAYER_CAPPED_STATUS[rp.id] !== false).length;
+      const uncappedCount = team.retainedPlayers.filter(rp => PLAYER_CAPPED_STATUS[rp.id] === false).length;
+
+      const cost = getRetentionCost(cappedCount, uncappedCount, isCapped);
+      if (cost === null || team.purse < cost) return state;
 
       const retainedPlayer: AuctionPlayer = { ...player, status: "sold", soldTo: action.teamId, soldPrice: cost };
       const teams = state.teams.map(t =>
@@ -375,7 +379,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         teams,
         playerPool: updatedPool,
-        auctionLog: addLog(state, `🔒 ${team.shortName} retains ${player.name} for ${formatPrice(cost)}!`, "system"),
+        auctionLog: addLog(state, `🔒 ${team.shortName} retains ${player.name} for ${formatPrice(cost)}${!isCapped ? " (Uncapped)" : ""}!`, "system"),
       };
     }
 
