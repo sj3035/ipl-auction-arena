@@ -18,11 +18,28 @@ import {
 } from "@/utils/auctionSounds";
 
 const BOT_STRATEGIES: BotStrategy[] = ["aggressive", "balanced", "budget", "specialist"];
-const POOL_ORDER: PlayerRole[] = ["Batter", "WK", "All-rounder", "Spinner", "Fast Bowler"];
 const AUTO_SKIP_NO_BID = 10; // seconds with no bids → auto-skip
 const AUTO_SELL_AFTER_BID = 6; // seconds after last bid → auto-sell
-const BATCH_SIZE = 6;
 const MARQUEE_RATING = 10;
+
+// Extended pool order: capped roles first, then uncapped roles
+type AuctionCategory = { role: PlayerRole; capped: boolean; label: string };
+const EXTENDED_POOL_ORDER: AuctionCategory[] = [
+  { role: "Batter", capped: true, label: "Capped Batters" },
+  { role: "WK", capped: true, label: "Capped WKs" },
+  { role: "All-rounder", capped: true, label: "Capped ARs" },
+  { role: "Spinner", capped: true, label: "Capped Spinners" },
+  { role: "Fast Bowler", capped: true, label: "Capped Pacers" },
+  { role: "Batter", capped: false, label: "Uncapped Batters" },
+  { role: "WK", capped: false, label: "Uncapped WKs" },
+  { role: "All-rounder", capped: false, label: "Uncapped ARs" },
+  { role: "Spinner", capped: false, label: "Uncapped Spinners" },
+  { role: "Fast Bowler", capped: false, label: "Uncapped Pacers" },
+];
+
+function isPlayerCapped(player: AuctionPlayer): boolean {
+  return PLAYER_CAPPED_STATUS[player.id] !== false;
+}
 
 function createInitialTeams(): TeamSlot[] {
   return IPL_TEAMS.map(t => ({
