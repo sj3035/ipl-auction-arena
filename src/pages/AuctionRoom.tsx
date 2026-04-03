@@ -136,7 +136,7 @@ export default function AuctionRoom() {
 
       {/* Mobile Layout */}
       <div className="flex-1 flex flex-col md:hidden overflow-hidden">
-        <div className="flex-1 overflow-y-auto">
+        <ScrollArea className="flex-1">
           {mobileTab === "auction" && (
             <div className="p-3 space-y-3">
               {state.currentPlayer ? (
@@ -184,7 +184,7 @@ export default function AuctionRoom() {
               <AuctionFeed log={state.auctionLog} />
             </div>
           )}
-        </div>
+        </ScrollArea>
 
         {/* Mobile Bottom Tab Bar */}
         <div className="border-t border-border bg-card grid grid-cols-4 shrink-0">
