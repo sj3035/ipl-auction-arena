@@ -184,7 +184,7 @@ export default function AuctionRoom() {
               <AuctionFeed log={state.auctionLog} />
             </div>
           )}
-        </div>
+        </ScrollArea>
 
         {/* Mobile Bottom Tab Bar */}
         <div className="border-t border-border bg-card grid grid-cols-4 shrink-0">

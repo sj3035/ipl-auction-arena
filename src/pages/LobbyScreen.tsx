@@ -214,8 +214,8 @@ export default function LobbyScreen() {
                 </div>
               </CardHeader>
               <CardContent>
-                <ScrollArea className="max-h-[350px]">
-                  <div className="space-y-2 pr-2">
+              <ScrollArea className="h-[400px]">
+                  <div className="space-y-2 pr-3">
                     {/* Already retained */}
                     {currentRetentionTeam.retainedPlayers.map((p) => {
                       const isCapped = PLAYER_CAPPED_STATUS[p.id] !== false;

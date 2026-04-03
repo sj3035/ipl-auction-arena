@@ -30,6 +30,13 @@ const statusColors: Record<string, string> = {
 export function PlayerPool({ players, currentPlayerId, mobile }: PlayerPoolProps) {
   const scrollHeight = mobile ? "h-[calc(100dvh-180px)]" : "h-[calc(100vh-420px)]";
 
+  const filteredPlayers = (category: string) =>
+    players.filter(p =>
+      category === "All" ? true :
+      category === "Marquee" ? p.rating >= MARQUEE_RATING :
+      p.role === category
+    );
+
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
       <div className="px-3 sm:px-4 py-2 border-b border-border bg-muted/30">
@@ -46,36 +53,31 @@ export function PlayerPool({ players, currentPlayerId, mobile }: PlayerPoolProps
         {categories.map(c => (
           <TabsContent key={c.value} value={c.value} className="mt-2">
             <ScrollArea className={scrollHeight}>
-              <div className="space-y-1 pr-2">
-                {players
-                  .filter(p =>
-                    c.value === "All" ? true :
-                    c.value === "Marquee" ? p.rating >= MARQUEE_RATING :
-                    p.role === c.value
-                  )
-                  .map(p => (
-                    <div
-                      key={p.id}
-                      className={`flex items-center justify-between px-2 sm:px-3 py-1.5 rounded text-xs ${
-                        p.id === currentPlayerId
-                          ? "bg-primary/20 border border-primary/40"
-                          : "hover:bg-muted/30"
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="font-medium text-foreground truncate">{p.name}</span>
-                        {p.nationality === "Overseas" && (
-                          <span className="text-[10px] text-amber-400 shrink-0">OS</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="text-muted-foreground text-[10px] sm:text-xs">{formatPrice(p.basePrice)}</span>
-                        <span className={`text-[10px] px-1 sm:px-1.5 py-0.5 rounded ${statusColors[p.status]}`}>
-                          {p.status === "sold" ? "SOLD" : p.status.toUpperCase()}
-                        </span>
-                      </div>
+              {/* Desktop/Tablet: list view. Mobile: compact grid */}
+              <div className={mobile ? "grid grid-cols-2 gap-1 pr-2" : "space-y-1 pr-2"}>
+                {filteredPlayers(c.value).map(p => (
+                  <div
+                    key={p.id}
+                    className={`flex items-center justify-between px-2 sm:px-3 py-1.5 rounded text-xs ${
+                      p.id === currentPlayerId
+                        ? "bg-primary/20 border border-primary/40"
+                        : "hover:bg-muted/30"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-medium text-foreground truncate">{p.name}</span>
+                      {p.nationality === "Overseas" && (
+                        <span className="text-[10px] text-amber-400 shrink-0">OS</span>
+                      )}
                     </div>
-                  ))}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-muted-foreground text-[10px] sm:text-xs">{formatPrice(p.basePrice)}</span>
+                      <span className={`text-[10px] px-1 sm:px-1.5 py-0.5 rounded ${statusColors[p.status]}`}>
+                        {p.status === "sold" ? "SOLD" : p.status.toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </ScrollArea>
           </TabsContent>
