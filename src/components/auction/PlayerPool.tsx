@@ -1,4 +1,4 @@
-import { AuctionPlayer, PlayerRole } from "@/types/auction";
+import { AuctionPlayer } from "@/types/auction";
 import { formatPrice } from "@/utils/bidUtils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
