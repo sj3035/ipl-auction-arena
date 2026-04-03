@@ -1,4 +1,5 @@
 import { AuctionPlayer } from "@/types/auction";
+import { PLAYER_CAPPED_STATUS } from "@/data/retentions";
 import { formatPrice } from "@/utils/bidUtils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -11,14 +12,24 @@ interface PlayerPoolProps {
 
 const MARQUEE_RATING = 10;
 
-const categories: Array<{ label: string; value: string }> = [
-  { label: "All", value: "All" },
-  { label: "⭐", value: "Marquee" },
-  { label: "Bat", value: "Batter" },
-  { label: "WK", value: "WK" },
-  { label: "AR", value: "All-rounder" },
-  { label: "Spin", value: "Spinner" },
-  { label: "Fast", value: "Fast Bowler" },
+function isPlayerCapped(p: AuctionPlayer): boolean {
+  return PLAYER_CAPPED_STATUS[p.id] !== false;
+}
+
+// Desktop/tablet: full labels. Mobile: short labels.
+const categories = [
+  { label: "All", shortLabel: "All", value: "All" },
+  { label: "⭐ Marquee", shortLabel: "⭐", value: "Marquee" },
+  { label: "C-Bat", shortLabel: "CB", value: "Capped-Batter" },
+  { label: "C-WK", shortLabel: "CW", value: "Capped-WK" },
+  { label: "C-AR", shortLabel: "CA", value: "Capped-AR" },
+  { label: "C-Spin", shortLabel: "CS", value: "Capped-Spinner" },
+  { label: "C-Pace", shortLabel: "CP", value: "Capped-Pacer" },
+  { label: "U-Bat", shortLabel: "UB", value: "Uncapped-Batter" },
+  { label: "U-WK", shortLabel: "UW", value: "Uncapped-WK" },
+  { label: "U-AR", shortLabel: "UA", value: "Uncapped-AR" },
+  { label: "U-Spin", shortLabel: "US", value: "Uncapped-Spinner" },
+  { label: "U-Pace", shortLabel: "UP", value: "Uncapped-Pacer" },
 ];
 
 const statusColors: Record<string, string> = {
@@ -27,15 +38,27 @@ const statusColors: Record<string, string> = {
   unsold: "bg-red-500/20 text-red-400",
 };
 
-export function PlayerPool({ players, currentPlayerId, mobile }: PlayerPoolProps) {
-  const scrollHeight = mobile ? "h-[calc(100dvh-180px)]" : "h-[calc(100vh-420px)]";
+function filterPlayers(players: AuctionPlayer[], category: string): AuctionPlayer[] {
+  if (category === "All") return players;
+  if (category === "Marquee") return players.filter(p => p.rating >= MARQUEE_RATING);
 
-  const filteredPlayers = (category: string) =>
-    players.filter(p =>
-      category === "All" ? true :
-      category === "Marquee" ? p.rating >= MARQUEE_RATING :
-      p.role === category
-    );
+  const [cappedStr, role] = category.split("-");
+  const capped = cappedStr === "Capped";
+  const roleMap: Record<string, string> = {
+    Batter: "Batter",
+    WK: "WK",
+    AR: "All-rounder",
+    Spinner: "Spinner",
+    Pacer: "Fast Bowler",
+  };
+  const actualRole = roleMap[role] || role;
+  return players.filter(
+    p => p.role === actualRole && p.rating < MARQUEE_RATING && isPlayerCapped(p) === capped
+  );
+}
+
+export function PlayerPool({ players, currentPlayerId, mobile }: PlayerPoolProps) {
+  const scrollHeight = mobile ? "h-[calc(100dvh-220px)]" : "h-[calc(100vh-460px)]";
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -43,19 +66,21 @@ export function PlayerPool({ players, currentPlayerId, mobile }: PlayerPoolProps
         <h3 className="text-xs sm:text-sm font-semibold text-muted-foreground uppercase tracking-wider">Player Pool</h3>
       </div>
       <Tabs defaultValue="All" className="p-2">
-        <TabsList className="w-full grid grid-cols-7 h-8">
-          {categories.map(c => (
-            <TabsTrigger key={c.value} value={c.value} className="text-[10px] sm:text-xs px-1">
-              {c.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        {/* Scrollable tab list for many categories */}
+        <ScrollArea className="w-full">
+          <TabsList className={`inline-flex w-auto gap-0.5 h-auto flex-wrap ${mobile ? "grid grid-cols-6 w-full" : ""}`}>
+            {categories.map(c => (
+              <TabsTrigger key={c.value} value={c.value} className="text-[9px] sm:text-[10px] lg:text-xs px-1.5 py-1 whitespace-nowrap">
+                {mobile ? c.shortLabel : c.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </ScrollArea>
         {categories.map(c => (
           <TabsContent key={c.value} value={c.value} className="mt-2">
             <ScrollArea className={scrollHeight}>
-              {/* Desktop/Tablet: list view. Mobile: compact grid */}
               <div className={mobile ? "grid grid-cols-2 gap-1 pr-2" : "space-y-1 pr-2"}>
-                {filteredPlayers(c.value).map(p => (
+                {filterPlayers(players, c.value).map(p => (
                   <div
                     key={p.id}
                     className={`flex items-center justify-between px-2 sm:px-3 py-1.5 rounded text-xs ${
@@ -78,6 +103,9 @@ export function PlayerPool({ players, currentPlayerId, mobile }: PlayerPoolProps
                     </div>
                   </div>
                 ))}
+                {filterPlayers(players, c.value).length === 0 && (
+                  <div className="text-center text-muted-foreground text-xs py-4">No players in this category</div>
+                )}
               </div>
             </ScrollArea>
           </TabsContent>
