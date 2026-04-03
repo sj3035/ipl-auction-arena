@@ -36,11 +36,15 @@ export default function AuctionRoom() {
     dispatch({ type: "SET_ACTIVE_HUMAN", index: newIdx });
   };
 
+  const CATEGORY_LABELS = [
+    "Capped Batters", "Capped WKs", "Capped ARs", "Capped Spinners", "Capped Pacers",
+    "Uncapped Batters", "Uncapped WKs", "Uncapped ARs", "Uncapped Spinners", "Uncapped Pacers",
+  ];
   const categoryLabel = state.isMarqueeRound
     ? "⭐ Marquee Round"
     : state.isMiniBidRound
       ? "Mini-Auction Round"
-      : `Round: ${state.poolCategoryOrder[state.currentCategoryIndex] || "Complete"}`;
+      : `${CATEGORY_LABELS[state.currentCategoryIndex] || "Complete"}`;
 
   const mobileTabs: { id: MobileTab; label: string; icon: React.ReactNode }[] = [
     { id: "auction", label: "Auction", icon: <Gavel className="w-4 h-4" /> },
