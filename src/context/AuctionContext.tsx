@@ -185,7 +185,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const isMarquee = !!marqueeFirst;
       const log = addLog(
         { ...state, auctionLog: [] },
-        isMarquee ? `⭐ IPL Auction begins! MARQUEE ROUND - Elite players first!` : `🏏 IPL Auction begins! First category: ${POOL_ORDER[0]}s`,
+        isMarquee ? `⭐ IPL Auction begins! MARQUEE ROUND - Elite players first!` : `🏏 IPL Auction begins! First category: ${EXTENDED_POOL_ORDER[0].label}`,
         "system"
       );
       const log2: AuctionLogEntry = {
