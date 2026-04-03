@@ -486,7 +486,7 @@ function createInitialState(): GameState {
     auctionLog: [],
     activeHumanTeamIndex: 0,
     currentPoolCategory: "All",
-    poolCategoryOrder: POOL_ORDER,
+    poolCategoryOrder: EXTENDED_POOL_ORDER.map(c => c.role),
     currentCategoryIndex: 0,
     isMiniBidRound: false,
     isMarqueeRound: false,
