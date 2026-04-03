@@ -18,11 +18,28 @@ import {
 } from "@/utils/auctionSounds";
 
 const BOT_STRATEGIES: BotStrategy[] = ["aggressive", "balanced", "budget", "specialist"];
-const POOL_ORDER: PlayerRole[] = ["Batter", "WK", "All-rounder", "Spinner", "Fast Bowler"];
 const AUTO_SKIP_NO_BID = 10; // seconds with no bids → auto-skip
 const AUTO_SELL_AFTER_BID = 6; // seconds after last bid → auto-sell
-const BATCH_SIZE = 6;
 const MARQUEE_RATING = 10;
+
+// Extended pool order: capped roles first, then uncapped roles
+type AuctionCategory = { role: PlayerRole; capped: boolean; label: string };
+const EXTENDED_POOL_ORDER: AuctionCategory[] = [
+  { role: "Batter", capped: true, label: "Capped Batters" },
+  { role: "WK", capped: true, label: "Capped WKs" },
+  { role: "All-rounder", capped: true, label: "Capped ARs" },
+  { role: "Spinner", capped: true, label: "Capped Spinners" },
+  { role: "Fast Bowler", capped: true, label: "Capped Pacers" },
+  { role: "Batter", capped: false, label: "Uncapped Batters" },
+  { role: "WK", capped: false, label: "Uncapped WKs" },
+  { role: "All-rounder", capped: false, label: "Uncapped ARs" },
+  { role: "Spinner", capped: false, label: "Uncapped Spinners" },
+  { role: "Fast Bowler", capped: false, label: "Uncapped Pacers" },
+];
+
+function isPlayerCapped(player: AuctionPlayer): boolean {
+  return PLAYER_CAPPED_STATUS[player.id] !== false;
+}
 
 function createInitialTeams(): TeamSlot[] {
   return IPL_TEAMS.map(t => ({
@@ -45,6 +62,17 @@ function addLog(state: GameState, message: string, type: AuctionLogEntry["type"]
   return [entry, ...state.auctionLog].slice(0, 200);
 }
 
+function getPlayersForCategory(pool: AuctionPlayer[], catIndex: number): AuctionPlayer[] {
+  const cat = EXTENDED_POOL_ORDER[catIndex];
+  if (!cat) return [];
+  return pool.filter(p =>
+    p.status === "upcoming" &&
+    p.role === cat.role &&
+    p.rating < MARQUEE_RATING &&
+    isPlayerCapped(p) === cat.capped
+  );
+}
+
 function getNextPlayerFromPool(state: GameState): AuctionPlayer | null {
   const pool = state.isMiniBidRound ? state.unsoldPlayers : state.playerPool;
 
@@ -54,10 +82,7 @@ function getNextPlayerFromPool(state: GameState): AuctionPlayer | null {
     return marquee[Math.floor(Math.random() * marquee.length)];
   }
 
-  const category = POOL_ORDER[state.currentCategoryIndex];
-  if (!category) return null;
-
-  const available = pool.filter(p => p.status === "upcoming" && p.role === category && p.rating < MARQUEE_RATING);
+  const available = getPlayersForCategory(pool, state.currentCategoryIndex);
   if (available.length === 0) return null;
 
   return available[Math.floor(Math.random() * available.length)];
@@ -73,31 +98,26 @@ function advanceCategory(state: GameState): Partial<GameState> {
       isMarqueeRound: false,
       currentCategoryIndex: 0,
       categoryBatchIndex: 0,
-      auctionLog: addLog(state, "🏏 Marquee round complete! Moving to category rounds.", "system"),
+      auctionLog: addLog(state, "🏏 Marquee round complete! Moving to Capped Batters.", "system"),
     };
   }
 
-  // Category batch logic: serve BATCH_SIZE per category, then rotate
-  const category = POOL_ORDER[state.currentCategoryIndex];
-  const availableInCat = pool.filter(p => p.status === "upcoming" && p.role === category && p.rating < MARQUEE_RATING);
-
-  // If current category still has players and we haven't exhausted the batch, stay
-  if (availableInCat.length > 0 && state.categoryBatchIndex < BATCH_SIZE) {
+  // Check if current category still has players
+  const availableInCat = getPlayersForCategory(pool, state.currentCategoryIndex);
+  if (availableInCat.length > 0) {
     return {};
   }
 
-  // Move to next category with available players
-  let nextIdx = (state.currentCategoryIndex + 1) % POOL_ORDER.length;
-  let checked = 0;
-  while (checked < POOL_ORDER.length) {
-    const cat = POOL_ORDER[nextIdx];
-    const available = pool.filter(p => p.status === "upcoming" && p.role === cat && p.rating < MARQUEE_RATING);
+  // Current category exhausted — move to next category with available players
+  let nextIdx = state.currentCategoryIndex + 1;
+  while (nextIdx < EXTENDED_POOL_ORDER.length) {
+    const available = getPlayersForCategory(pool, nextIdx);
     if (available.length > 0) break;
-    nextIdx = (nextIdx + 1) % POOL_ORDER.length;
-    checked++;
+    nextIdx++;
   }
 
-  if (checked >= POOL_ORDER.length) {
+  if (nextIdx >= EXTENDED_POOL_ORDER.length) {
+    // All categories exhausted
     if (!state.isMiniBidRound && state.unsoldPlayers.length > 0) {
       const teamsNeedPlayers = state.teams.some(t => t.squad.length < 18);
       if (teamsNeedPlayers) {
@@ -116,7 +136,7 @@ function advanceCategory(state: GameState): Partial<GameState> {
   return {
     currentCategoryIndex: nextIdx,
     categoryBatchIndex: 0,
-    auctionLog: addLog(state, `📋 Now auctioning: ${POOL_ORDER[nextIdx]}s (batch of ${BATCH_SIZE})`, "system"),
+    auctionLog: addLog(state, `📋 Now auctioning: ${EXTENDED_POOL_ORDER[nextIdx].label}`, "system"),
   };
 }
 
@@ -165,7 +185,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const isMarquee = !!marqueeFirst;
       const log = addLog(
         { ...state, auctionLog: [] },
-        isMarquee ? `⭐ IPL Auction begins! MARQUEE ROUND - Elite players first!` : `🏏 IPL Auction begins! First category: ${POOL_ORDER[0]}s`,
+        isMarquee ? `⭐ IPL Auction begins! MARQUEE ROUND - Elite players first!` : `🏏 IPL Auction begins! First category: ${EXTENDED_POOL_ORDER[0].label}`,
         "system"
       );
       const log2: AuctionLogEntry = {
@@ -466,7 +486,7 @@ function createInitialState(): GameState {
     auctionLog: [],
     activeHumanTeamIndex: 0,
     currentPoolCategory: "All",
-    poolCategoryOrder: POOL_ORDER,
+    poolCategoryOrder: EXTENDED_POOL_ORDER.map(c => c.role),
     currentCategoryIndex: 0,
     isMiniBidRound: false,
     isMarqueeRound: false,
