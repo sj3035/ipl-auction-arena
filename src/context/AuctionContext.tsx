@@ -62,6 +62,17 @@ function addLog(state: GameState, message: string, type: AuctionLogEntry["type"]
   return [entry, ...state.auctionLog].slice(0, 200);
 }
 
+function getPlayersForCategory(pool: AuctionPlayer[], catIndex: number): AuctionPlayer[] {
+  const cat = EXTENDED_POOL_ORDER[catIndex];
+  if (!cat) return [];
+  return pool.filter(p =>
+    p.status === "upcoming" &&
+    p.role === cat.role &&
+    p.rating < MARQUEE_RATING &&
+    isPlayerCapped(p) === cat.capped
+  );
+}
+
 function getNextPlayerFromPool(state: GameState): AuctionPlayer | null {
   const pool = state.isMiniBidRound ? state.unsoldPlayers : state.playerPool;
 
@@ -71,10 +82,7 @@ function getNextPlayerFromPool(state: GameState): AuctionPlayer | null {
     return marquee[Math.floor(Math.random() * marquee.length)];
   }
 
-  const category = POOL_ORDER[state.currentCategoryIndex];
-  if (!category) return null;
-
-  const available = pool.filter(p => p.status === "upcoming" && p.role === category && p.rating < MARQUEE_RATING);
+  const available = getPlayersForCategory(pool, state.currentCategoryIndex);
   if (available.length === 0) return null;
 
   return available[Math.floor(Math.random() * available.length)];
@@ -90,31 +98,26 @@ function advanceCategory(state: GameState): Partial<GameState> {
       isMarqueeRound: false,
       currentCategoryIndex: 0,
       categoryBatchIndex: 0,
-      auctionLog: addLog(state, "🏏 Marquee round complete! Moving to category rounds.", "system"),
+      auctionLog: addLog(state, "🏏 Marquee round complete! Moving to Capped Batters.", "system"),
     };
   }
 
-  // Category batch logic: serve BATCH_SIZE per category, then rotate
-  const category = POOL_ORDER[state.currentCategoryIndex];
-  const availableInCat = pool.filter(p => p.status === "upcoming" && p.role === category && p.rating < MARQUEE_RATING);
-
-  // If current category still has players and we haven't exhausted the batch, stay
-  if (availableInCat.length > 0 && state.categoryBatchIndex < BATCH_SIZE) {
+  // Check if current category still has players
+  const availableInCat = getPlayersForCategory(pool, state.currentCategoryIndex);
+  if (availableInCat.length > 0) {
     return {};
   }
 
-  // Move to next category with available players
-  let nextIdx = (state.currentCategoryIndex + 1) % POOL_ORDER.length;
-  let checked = 0;
-  while (checked < POOL_ORDER.length) {
-    const cat = POOL_ORDER[nextIdx];
-    const available = pool.filter(p => p.status === "upcoming" && p.role === cat && p.rating < MARQUEE_RATING);
+  // Current category exhausted — move to next category with available players
+  let nextIdx = state.currentCategoryIndex + 1;
+  while (nextIdx < EXTENDED_POOL_ORDER.length) {
+    const available = getPlayersForCategory(pool, nextIdx);
     if (available.length > 0) break;
-    nextIdx = (nextIdx + 1) % POOL_ORDER.length;
-    checked++;
+    nextIdx++;
   }
 
-  if (checked >= POOL_ORDER.length) {
+  if (nextIdx >= EXTENDED_POOL_ORDER.length) {
+    // All categories exhausted
     if (!state.isMiniBidRound && state.unsoldPlayers.length > 0) {
       const teamsNeedPlayers = state.teams.some(t => t.squad.length < 18);
       if (teamsNeedPlayers) {
@@ -133,7 +136,7 @@ function advanceCategory(state: GameState): Partial<GameState> {
   return {
     currentCategoryIndex: nextIdx,
     categoryBatchIndex: 0,
-    auctionLog: addLog(state, `📋 Now auctioning: ${POOL_ORDER[nextIdx]}s (batch of ${BATCH_SIZE})`, "system"),
+    auctionLog: addLog(state, `📋 Now auctioning: ${EXTENDED_POOL_ORDER[nextIdx].label}`, "system"),
   };
 }
 
