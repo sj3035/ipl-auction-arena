@@ -304,6 +304,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const buyerTeam = state.teams.find(t => t.teamId === state.currentBidder);
       if (!buyerTeam) return state;
 
+      // Prevent duplicate: if player already in squad, skip
+      if (buyerTeam.squad.some(p => p.id === state.currentPlayer!.id)) return state;
+
       const soldPlayer: AuctionPlayer = {
         ...state.currentPlayer,
         status: "sold",
