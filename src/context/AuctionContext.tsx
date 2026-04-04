@@ -669,14 +669,21 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
     };
   }, [state.phase, state.auctionPaused, state.currentPlayer, state.isHost]);
 
+  // Reset processing guard when player changes
+  useEffect(() => {
+    processingRef.current = false;
+  }, [state.currentPlayer?.id]);
+
   // Auto-skip: 10s with no bids → skip (host only)
   useEffect(() => {
     if (!state.isHost) return;
     if (state.phase !== "auction" || state.auctionPaused || !state.currentPlayer) return;
     if (state.currentBidder !== null) return; // someone has bid
+    if (processingRef.current) return; // already processing
 
     const elapsed = TIMER_DURATION - state.timer;
     if (elapsed >= AUTO_SKIP_NO_BID) {
+      processingRef.current = true;
       dispatch({ type: "MARK_UNSOLD" });
       setTimeout(() => {
         dispatch({ type: "NEXT_PLAYER" });
@@ -689,9 +696,11 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
     if (!state.isHost) return;
     if (state.phase !== "auction" || state.auctionPaused || !state.currentPlayer) return;
     if (state.currentBidder === null) return; // no bid yet
+    if (processingRef.current) return; // already processing
 
     const elapsed = TIMER_DURATION - state.timer;
     if (elapsed >= AUTO_SELL_AFTER_BID) {
+      processingRef.current = true;
       dispatch({ type: "SELL_PLAYER" });
       setTimeout(() => {
         dispatch({ type: "NEXT_PLAYER" });
