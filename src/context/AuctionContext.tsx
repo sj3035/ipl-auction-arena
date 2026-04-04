@@ -521,6 +521,7 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
   const prevPlayerRef = useRef<string | null>(null);
   const prevBidRef = useRef<number>(0);
   const prevTimerRef = useRef<number>(TIMER_DURATION);
+  const processingRef = useRef(false); // guard against double-fire of auto-skip/sell
 
   const getHumanTeams = useCallback(() => {
     return state.teams.filter(t => !t.isBot);
