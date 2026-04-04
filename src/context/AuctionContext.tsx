@@ -304,6 +304,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const buyerTeam = state.teams.find(t => t.teamId === state.currentBidder);
       if (!buyerTeam) return state;
 
+      // Prevent duplicate: if player already in squad, skip
+      if (buyerTeam.squad.some(p => p.id === state.currentPlayer!.id)) return state;
+
       const soldPlayer: AuctionPlayer = {
         ...state.currentPlayer,
         status: "sold",
@@ -521,6 +524,7 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
   const prevPlayerRef = useRef<string | null>(null);
   const prevBidRef = useRef<number>(0);
   const prevTimerRef = useRef<number>(TIMER_DURATION);
+  const processingRef = useRef(false); // guard against double-fire of auto-skip/sell
 
   const getHumanTeams = useCallback(() => {
     return state.teams.filter(t => !t.isBot);
@@ -665,14 +669,21 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
     };
   }, [state.phase, state.auctionPaused, state.currentPlayer, state.isHost]);
 
+  // Reset processing guard when player changes
+  useEffect(() => {
+    processingRef.current = false;
+  }, [state.currentPlayer?.id]);
+
   // Auto-skip: 10s with no bids → skip (host only)
   useEffect(() => {
     if (!state.isHost) return;
     if (state.phase !== "auction" || state.auctionPaused || !state.currentPlayer) return;
     if (state.currentBidder !== null) return; // someone has bid
+    if (processingRef.current) return; // already processing
 
     const elapsed = TIMER_DURATION - state.timer;
     if (elapsed >= AUTO_SKIP_NO_BID) {
+      processingRef.current = true;
       dispatch({ type: "MARK_UNSOLD" });
       setTimeout(() => {
         dispatch({ type: "NEXT_PLAYER" });
@@ -685,9 +696,11 @@ export function AuctionProvider({ children }: { children: React.ReactNode }) {
     if (!state.isHost) return;
     if (state.phase !== "auction" || state.auctionPaused || !state.currentPlayer) return;
     if (state.currentBidder === null) return; // no bid yet
+    if (processingRef.current) return; // already processing
 
     const elapsed = TIMER_DURATION - state.timer;
     if (elapsed >= AUTO_SELL_AFTER_BID) {
+      processingRef.current = true;
       dispatch({ type: "SELL_PLAYER" });
       setTimeout(() => {
         dispatch({ type: "NEXT_PLAYER" });
