@@ -7,6 +7,7 @@ import { AuctionProvider } from "@/context/AuctionContext";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
+
 const queryClient = new QueryClient();
 
 const App = () => (
